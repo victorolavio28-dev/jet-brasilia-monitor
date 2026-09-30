@@ -2,7 +2,7 @@
   "name": "JET Brasília Monitor",
   "short_name": "JET Monitor",
   "description": "Monitor operacional dos estacionamentos JET em Brasília",
-  "start_url": "./jet_brasilia_monitor_v3_mapa.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

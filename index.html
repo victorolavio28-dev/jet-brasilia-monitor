@@ -1,0 +1,281 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>JET Brasília Monitor</title><meta name="theme-color" content="#121624"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="JET Monitor"><link rel="manifest" href="manifest.json"><link href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" rel="stylesheet"><style>
+body{margin:0;background:#090b12;color:#f4f6fb;font:14px system-ui}header{padding:16px;background:#121624;position:sticky;top:0;z-index:9}h1{margin:0;font-size:20px}.sub{color:#9aa3ba;font-size:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}button,input,select{background:#181d2d;color:#fff;border:1px solid #30374e;border-radius:9px;padding:8px}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px}.card{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:12px}.label{color:#9aa3ba;font-size:10px}.value{font-size:23px;font-weight:800}main{padding:0 10px}#map{height:60vh;border-radius:13px;overflow:hidden}.tables{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.box{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:10px;overflow:auto;max-height:420px}table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px;border-bottom:1px solid #252b3e;text-align:left}th{color:#9aa3ba}.ok{color:#18b77a}.warn{color:#c98b00}.orange{color:#ff9500}.bad{color:#ff3b30}@media(max-width:800px){.cards{grid-template-columns:repeat(2,1fr)}.tables{grid-template-columns:1fr}#map{height:58vh}}
+<style>
+#map{position:relative;background:#eef1f3;touch-action:none}
+.maplibregl-canvas{outline:none}
+.maplibregl-ctrl-group{border:1px solid #d7dce2!important;border-radius:11px!important;overflow:hidden;box-shadow:0 4px 16px rgba(20,25,35,.16)!important}
+.maplibregl-ctrl button{width:34px!important;height:34px!important}
+.rotate-tools{position:absolute;right:12px;bottom:112px;z-index:5;display:flex;gap:5px;background:rgba(255,255,255,.92);padding:5px;border-radius:11px;box-shadow:0 4px 16px rgba(20,25,35,.16);backdrop-filter:blur(8px)}
+.rotate-tools button{border:0;background:#fff;color:#283244;font-weight:800;width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:17px}
+.rotate-tools button:hover{background:#edf1f5}
+.rotate-tools #north{font-size:13px;color:#1677ff}
+.jet-marker{width:27px;height:27px;border:2px solid rgba(255,255,255,.95);border-radius:50%;box-shadow:0 2px 7px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;color:#07110e;font-size:11px;font-weight:900;box-sizing:border-box;transition:transform .15s}
+.jet-marker:hover{transform:scale(1.22)}
+.popup{color:#202733;font-size:13px;line-height:1.55}.popup b{font-size:14px}.popup small{color:#727b89}
+.parking-popup{width:100%;max-width:300px}.popup-title{font-size:16px;font-weight:800;margin-bottom:6px;color:#172033}.popup-row{font-size:13px;margin-bottom:6px}.popup-status{font-weight:800;margin:5px 0}.popup-update{font-size:11px;color:#727b89;margin-bottom:9px}.popup-nav{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.nav-btn{display:flex;align-items:center;justify-content:center;text-decoration:none;border-radius:9px;padding:9px 6px;font-size:12px;font-weight:800;color:#fff!important}.nav-btn.google{background:#4285f4}.nav-btn.waze{background:#1598ff}.parking-guide-btn{width:100%;border:1px solid #d4dbe3;background:#f4f7fa;color:#172033;border-radius:9px;padding:9px 8px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:none}.parking-guide{display:none;margin-top:8px}.parking-guide.open{display:block}.parking-guide img{display:block;width:100%;height:auto;max-height:240px;object-fit:cover;border-radius:10px;border:1px solid #e1e5ea}.parking-guide-btn:active{transform:scale(.99)}
+body.dark .parking-guide-btn{background:#202c3a;color:#eef3f8;border-color:#344354}
+body.dark .popup-title{color:#172033}
+
+.maplibregl-popup-content{border-radius:12px!important;box-shadow:0 8px 30px rgba(0,0,0,.18)!important}
+.subtle{color:#667085}
+.location-marker{width:18px;height:18px;border-radius:50%;background:#1677ff;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.35);position:relative}.location-marker:after{content:"";position:absolute;inset:-9px;border:2px solid rgba(22,119,255,.35);border-radius:50%;animation:locpulse 1.8s infinite}.location-label{background:rgba(255,255,255,.96);color:#172033;border:1px solid #d4dbe3;border-radius:8px;padding:4px 7px;font-size:11px;font-weight:800;box-shadow:0 3px 12px rgba(20,25,35,.18);white-space:nowrap;margin-top:-42px;margin-left:12px}.location-tools{position:absolute;right:12px;bottom:215px;z-index:5}.location-tools button{border:1px solid #d7dce2;background:rgba(255,255,255,.95);color:#172033;width:42px;height:42px;border-radius:11px;box-shadow:0 4px 16px rgba(20,25,35,.16);font-size:20px;cursor:pointer}@keyframes locpulse{0%{transform:scale(.75);opacity:.9}70%{transform:scale(1.25);opacity:0}100%{transform:scale(.75);opacity:0}}
+body.dark .location-tools button{background:rgba(17,25,35,.94);color:#eef3f8;border-color:#344354}.location-label.dark{background:rgba(17,25,35,.96);color:#eef3f8;border-color:#344354}
+
+@media(max-width:800px){.rotate-tools{bottom:105px;right:9px}.jet-marker{width:25px;height:25px}}
+.search-box{position:relative;min-width:210px}.search-suggestions{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel,#fff);border:1px solid rgba(127,127,127,.25);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden;z-index:2000}.search-suggestions.open{display:block}.search-suggestions button{display:block;width:100%;padding:10px 12px;text-align:left;border:0;background:transparent;color:inherit;cursor:pointer}.search-suggestions button:hover{background:rgba(127,127,127,.12)}.search-suggestions strong,.search-suggestions small{display:block}.search-suggestions small{opacity:.65;margin-top:2px}</style>
+
+<style id="v3css">
+:root{--bg:#eef2f5;--panel:#fff;--text:#172033;--muted:#667085;--line:#dce2e8}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;padding:0;overflow-x:hidden;overflow-y:auto;-webkit-text-size-adjust:100%;touch-action:manipulation;overscroll-behavior:none}
+body{background:var(--bg);color:var(--text);font:14px system-ui,sans-serif}
+header{display:none}
+main{padding:0;position:relative;width:100%;min-height:100dvh}
+#map{position:relative;width:100%;height:100dvh;min-height:100svh;border-radius:0;touch-action:none}
+.map-topbar{position:absolute;top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));z-index:20;display:grid;grid-template-columns:minmax(0,1fr);gap:7px;pointer-events:none}
+.map-topbar>*{pointer-events:auto}
+.search-box{position:relative;width:100%;min-width:0}
+.map-topbar input{display:block;width:100%;height:44px;min-width:0;max-width:none;padding:0 14px;font-size:16px;background:rgba(255,255,255,.96);color:#172033;border:1px solid #d4dbe3;border-radius:12px;box-shadow:0 4px 18px rgba(20,25,35,.16);backdrop-filter:blur(10px);outline:none}
+.map-topbar input:focus{border-color:#8fb7ea}
+.map-actions{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:7px;width:100%}
+.map-topbar button{height:42px;min-width:0;width:100%;padding:0 7px;background:rgba(255,255,255,.96);color:#172033;border:1px solid #d4dbe3;border-radius:11px;box-shadow:0 4px 18px rgba(20,25,35,.16);white-space:nowrap;font-size:13px;overflow:hidden;text-overflow:ellipsis}
+.filter-wrap{position:relative;min-width:0}.filter-wrap>button{width:100%}
+.filter-menu{display:none;position:absolute;top:48px;left:0;right:0;background:rgba(255,255,255,.98);border:1px solid #d4dbe3;border-radius:12px;padding:6px;box-shadow:0 8px 28px rgba(20,25,35,.2);min-width:210px;z-index:30}
+.filter-menu.open{display:block}.filter-menu button{display:block;width:100%;text-align:left;background:transparent!important;box-shadow:none!important;border:0!important;padding:10px 11px!important;border-radius:8px;color:#172033;height:auto!important;white-space:normal}.filter-menu button:hover{background:#edf1f5!important}.filter-menu button.active{background:#e8f1ff!important;color:#1264d8;font-weight:800}
+.search-suggestions{display:none;position:absolute;top:50px;left:0;right:0;background:var(--panel,#fff);border:1px solid rgba(127,127,127,.25);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden;z-index:40;max-height:55vh;overflow-y:auto}.search-suggestions.open{display:block}.search-suggestions button{display:block;width:100%;padding:10px 12px;text-align:left;border:0;background:transparent;color:inherit;cursor:pointer;height:auto!important;white-space:normal}.search-suggestions button:hover{background:rgba(127,127,127,.12)}.search-suggestions strong,.search-suggestions small{display:block}.search-suggestions small{opacity:.65;margin-top:2px}
+#infoPanel{display:none;padding:10px;background:var(--bg)}#infoPanel.open{display:block}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:0 0 10px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}.label{color:var(--muted);font-size:10px}.value{font-size:23px;font-weight:800}.tables{display:grid;grid-template-columns:1fr 1fr;gap:10px}.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;overflow:auto;max-height:420px}table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--muted)}
+.ok{color:#18b77a}.warn{color:#c98b00}.orange{color:#ff9500}.bad{color:#ff3b30}
+body.dark{--bg:#080d14;--panel:#111923;--text:#eef3f8;--muted:#9ba9ba;--line:#253240}body.dark #map{filter:none;background:#0b1118}body.dark .map-topbar input,body.dark .map-topbar button{background:rgba(17,25,35,.95);color:#eef3f8;border-color:#344354}body.dark .filter-menu{background:rgba(17,25,35,.98);border-color:#344354}body.dark .filter-menu button{color:#eef3f8}body.dark .filter-menu button:hover{background:#202c3a!important}body.dark .filter-menu button.active{background:#173b63!important;color:#74b5ff}body.dark .card,body.dark .box{background:#111923;border-color:#253240}body.dark td,body.dark th{border-color:#253240}
+.maplibregl-ctrl-bottom-right{right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom))}.maplibregl-ctrl-bottom-left{left:max(8px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom))}
+.rotate-tools{position:absolute;right:max(9px,env(safe-area-inset-right));bottom:calc(112px + env(safe-area-inset-bottom));z-index:5;display:flex;gap:5px;background:rgba(255,255,255,.94);padding:5px;border-radius:11px;box-shadow:0 4px 16px rgba(20,25,35,.16);backdrop-filter:blur(8px)}.rotate-tools button{border:0;background:#fff;color:#283244;font-weight:800;width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:17px;padding:0;box-shadow:none}.rotate-tools #north{font-size:13px;color:#1677ff}
+.location-tools{position:absolute;right:max(9px,env(safe-area-inset-right));bottom:calc(214px + env(safe-area-inset-bottom));z-index:5}.location-tools button{border:1px solid #d7dce2;background:rgba(255,255,255,.95);color:#172033;width:42px;height:42px;border-radius:11px;box-shadow:0 4px 16px rgba(20,25,35,.16);font-size:20px;cursor:pointer;padding:0}body.dark .location-tools button{background:rgba(17,25,35,.94);color:#eef3f8;border-color:#344354}
+@media(min-width:651px){.map-topbar{grid-template-columns:minmax(280px,1fr) auto;align-items:start}.map-actions{display:flex;width:auto;gap:8px}.map-actions .filter-wrap{width:auto}.map-actions button{width:auto}.map-topbar input{max-width:520px}}
+@media(max-width:650px){.cards{grid-template-columns:repeat(2,1fr)}.tables{grid-template-columns:1fr}.filter-menu{min-width:0}.map-actions{grid-template-columns:1.2fr 1fr 1fr}}
+@media(max-width:380px){.map-actions{gap:5px}.map-actions button{font-size:12px;padding:0 5px}}
+</style>
+</style></head><body>
+<header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 60s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option></select><input id="q" placeholder="Buscar ponto"></div></header>
+<main><div id="map"></div><div class="map-topbar"><div class="search-box"><input id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Buscar estacionamento..."><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">⚙️ Filtros</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button></div></div><section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Meta</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 30%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
+<script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script><script>
+const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
+let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
+
+const blankStyle={
+  version:8,
+  sources:{
+    osm:{type:"raster",tiles:["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],tileSize:256,attribution:"© OpenStreetMap contributors"}
+  },
+  layers:[
+    {id:"osm",type:"raster",source:"osm",paint:{
+      "raster-saturation":0.15,
+      "raster-contrast":0.08,
+      "raster-brightness-min":0.08,
+      "raster-brightness-max":0.92,
+      "raster-opacity":0.92
+    }}
+  ]
+};
+
+function initMap(){
+  map=new maplibregl.Map({
+    container:"map",
+    style:blankStyle,
+    center:[-47.89,-15.79],
+    zoom:11.8,
+    bearing:0,
+    pitch:0,
+    attributionControl:false,
+    dragRotate:true,
+    touchZoomRotate:true
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:true,showZoom:true,visualizePitch:true}),"bottom-right");
+  map.addControl(new maplibregl.AttributionControl({compact:true}),"bottom-left");
+
+  // Botões rápidos de rotação.
+  const rot=document.createElement("div");
+  rot.className="rotate-tools";
+  rot.innerHTML='<button id="rotL" title="Girar para a esquerda">↺</button><button id="north" title="Voltar para o norte">N</button><button id="rotR" title="Girar para a direita">↻</button>';
+  document.getElementById("map").appendChild(rot);
+  document.getElementById("rotL").onclick=()=>map.easeTo({bearing:map.getBearing()-30,duration:250});
+  document.getElementById("rotR").onclick=()=>map.easeTo({bearing:map.getBearing()+30,duration:250});
+  document.getElementById("north").onclick=()=>map.easeTo({bearing:0,pitch:0,duration:350});
+
+  const loc=document.createElement("div");
+  loc.className="location-tools";
+  loc.innerHTML='<button id="myLocation" title="Mostrar minha localização">⌾</button>';
+  document.getElementById("map").appendChild(loc);
+  document.getElementById("myLocation").onclick=()=>requestLocation(true);
+
+  map.on("load",()=>{render(); requestLocation(false);});
+  map.on("moveend",()=>render());
+  map.on("zoomend",()=>render());
+}
+
+async function all(x){
+  let a=await fetch(`${B}/${x}?city_id=${C}&page=1&limit=1000`,{cache:"no-store"}).then(r=>r.json()),v=a.entries||[];
+  for(let i=2;i<=+a.total_pages;i++)
+    v=v.concat((await fetch(`${B}/${x}?city_id=${C}&page=${i}&limit=1000`,{cache:"no-store"}).then(r=>r.json())).entries||[]);
+  return v
+}
+
+function stat(x){
+  const n=+x.bikes_count||0,t=+x.target_bikes_count||0;
+  // Prioridade: monitor zerado > 1 patinete > abaixo da meta > meta atingida/superada.
+  if(x.monitor && n===0)return["Vazio — prioridade máxima","bad"];
+  if(n===1)return["1 patinete — prioridade","orange"];
+  if(t>0 && n<t)return["Abaixo da meta","warn"];
+  if(t>0 && n>=t)return["Meta atingida","ok"];
+  if(n===0)return["Vazio","warn"];
+  return["OK","ok"]
+}
+
+function clearMarkers(){
+  markers.forEach(m=>m.remove());
+  markers=[];
+}
+
+function render(){
+  if(!map || !map.loaded()) return;
+  clearMarkers();
+
+  const f=document.getElementById("f").value,q=document.getElementById("q").value.toLowerCase();
+
+  // Não limitar os marcadores aos limites atuais do mapa.
+  // Isso evita que pontos desapareçam ao abrir, arrastar ou alterar o zoom.
+  // O filtro controla exatamente quais estacionamentos são desenhados.
+  const visible=P.filter(x=>{
+    let n=+x.bikes_count||0,t=+x.target_bikes_count||0;
+    if(q&&!String(x.name).toLowerCase().includes(q))return false;
+    if(f=="monitor"&&!x.monitor)return false;
+    if(f=="monitor-zero"&&!(x.monitor&&n===0))return false;
+    if(x.latitude==null||x.longitude==null)return false;
+    return true;
+  });
+  visible.forEach(x=>{
+    if(x.latitude==null)return;
+    let [st,cl]=stat(x);
+    const color=cl==="bad"?"#ff3b30":cl==="orange"?"#ff9500":cl==="warn"?"#ffc857":"#21d19a";
+    const el=document.createElement("div");
+    el.className="jet-marker";
+    el.style.background=color;
+    el.innerHTML=`<span>${x.bikes_count||0}</span>`;
+    const lat=Number(x.latitude), lng=Number(x.longitude);
+    const googleUrl=`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+    const wazeUrl=`https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+    const popup=new maplibregl.Popup({offset:16,maxWidth:"330px"}).setHTML(
+      `<div class="popup parking-popup">
+        <div class="popup-title">${x.name}</div>
+        <div class="popup-row">🛴 <b>${x.bikes_count||0}</b> patinetes &nbsp; • &nbsp; 🎯 Meta: <b>${x.target_bikes_count??"—"}</b></div>
+        <div class="popup-status ${cl}">${st}</div>
+        <div class="popup-update">Última atualização: ${x.bc_updated_at||"—"}</div>
+        <div class="popup-nav">
+          <a class="nav-btn google" href="${googleUrl}" target="_blank" rel="noopener">🗺️ Google Maps</a>
+          <a class="nav-btn waze" href="${wazeUrl}" target="_blank" rel="noopener">🚗 Waze</a>
+        </div>
+        <button class="parking-guide-btn" type="button" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'📷 Ocultar como estacionar':'📷 Como estacionar?'">📷 Como estacionar?</button>
+        <div class="parking-guide"><img src="como-estacionar.jpg" alt="Exemplo de como estacionar o patinete"></div>
+      </div>`
+    );
+    const marker=new maplibregl.Marker({element:el,anchor:"center",rotationAlignment:"map"})
+      .setLngLat([x.longitude,x.latitude]).setPopup(popup).addTo(map);
+    marker.__parkingId=x.id;
+    markers.push(marker);
+  });
+
+  let a=P.filter(x=>(+x.bikes_count||0)==0||((+x.target_bikes_count||0)>0&&(+x.bikes_count||0)<(+x.target_bikes_count||0)))
+    .sort((a,b)=>(+a.bikes_count||0)-(+b.bikes_count||0)).slice(0,100);
+
+  document.getElementById("att").innerHTML=a.map(x=>{
+    let [st,cl]=stat(x);
+    return `<tr><td>${x.name}</td><td>${x.bikes_count||0}</td><td>${x.target_bikes_count??"—"}</td><td class="${cl}">${st}</td></tr>`
+  }).join("");
+
+  let l=S.filter(x=>(+x.battery_percent)<.3).sort((a,b)=>a.battery_percent-b.battery_percent).slice(0,100);
+  document.getElementById("lb").innerHTML=l.map(x=>
+    `<tr><td>${x.identifier||x.name}</td><td class="bad">${Math.round(x.battery_percent*100)}%</td><td>${x.business_status||"—"}</td></tr>`
+  ).join("")||"<tr><td colspan=3>Nenhum registro.</td></tr>";
+}
+function updateUserLocation(pos,center=false){
+  const {latitude,longitude,accuracy}=pos.coords;
+  const el=userMarker?userMarker.getElement():document.createElement("div");
+  if(!userMarker){
+    el.className="location-marker";
+    userMarker=new maplibregl.Marker({element:el,anchor:"center",rotationAlignment:"map"}).setLngLat([longitude,latitude]).addTo(map);
+  }else userMarker.setLngLat([longitude,latitude]);
+  const btn=document.getElementById("myLocation");
+  if(btn) btn.title=`Minha localização • precisão aproximada ${Math.round(accuracy||0)} m`;
+  if(center && map){ map.easeTo({center:[longitude,latitude],zoom:Math.max(map.getZoom(),15),duration:500}); }
+}
+function locationError(err){
+  const btn=document.getElementById("myLocation");
+  const msg=err.code===1?"Permita a localização do navegador para acompanhar o auxiliar. Se o navegador bloquear localização em arquivo local, abra o app por HTTPS.":"Não foi possível obter a localização. Toque novamente no botão de localização.";
+  if(btn) btn.title=msg;
+  const status=document.getElementById("s");
+  if(status && !P.length) status.textContent=msg;
+}
+function requestLocation(center){
+  if(!navigator.geolocation){locationError({code:2});return;}
+  navigator.geolocation.getCurrentPosition(pos=>{updateUserLocation(pos,center||firstUserFix);firstUserFix=false},locationError,{enableHighAccuracy:true,maximumAge:10000,timeout:10000});
+  if(userWatchId===null){
+    userWatchId=navigator.geolocation.watchPosition(pos=>{updateUserLocation(pos,false);firstUserFix=false},locationError,{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+  }
+}
+
+async function load(){try{
+  // O modo operacional padrão é Monitor.
+  document.getElementById("f").value="monitor";
+  if(typeof filterMenu!=="undefined") filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter==="monitor"));
+  if(typeof filterBtn!=="undefined") filterBtn.textContent="🟡 Monitor";
+  P=await all("parkings");
+  document.getElementById("p").textContent=P.length.toLocaleString("pt-BR");
+  document.getElementById("z").textContent=P.filter(x=>(+x.bikes_count||0)==0).length.toLocaleString("pt-BR");
+  document.getElementById("m").textContent=P.filter(x=>x.monitor).length.toLocaleString("pt-BR");
+  render();
+  document.getElementById("s").textContent="Mapa carregado — dados de patinetes serão consultados quando necessários.";
+}catch(e){document.getElementById("s").textContent="Erro ao consultar a API: "+e.message}}
+
+async function loadBikes(){if(bikesLoaded)return; try{S=await all("bikes");bikesLoaded=true;document.getElementById("b").textContent=S.length.toLocaleString("pt-BR");let v=S.map(x=>+x.battery_percent).filter(Number.isFinite);document.getElementById("bat").textContent=v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)+"%":"—";render();}catch(e){document.getElementById("s").textContent="Erro ao consultar patinetes: "+e.message}}
+initMap();
+document.getElementById("r").onclick=load;document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Filtros":v==="monitor"?"🟡 Monitor":"🔴 Monitor zerados";render();};document.getElementById("q").oninput=render;load();setInterval(load,60000);
+</script>
+<script>
+const themeBtn=document.getElementById("themeBtn"),infoBtn=document.getElementById("infoBtn"),infoPanel=document.getElementById("infoPanel"),mapSearch=document.getElementById("mapSearch"),searchSuggestions=document.getElementById("searchSuggestions"),filterBtn=document.getElementById("filterBtn"),filterMenu=document.getElementById("filterMenu"),filterWrap=document.querySelector(".filter-wrap");
+
+// Impede o zoom do navegador no celular, sem bloquear o zoom/gestos do mapa.
+document.addEventListener("dblclick",e=>{if(!e.target.closest("#map"))e.preventDefault()},{passive:false});
+document.addEventListener("gesturestart",e=>{if(!e.target.closest("#map"))e.preventDefault()},{passive:false});
+document.addEventListener("gesturechange",e=>{if(!e.target.closest("#map"))e.preventDefault()},{passive:false});
+document.addEventListener("gestureend",e=>{if(!e.target.closest("#map"))e.preventDefault()},{passive:false});
+filterBtn.onclick=()=>filterMenu.classList.toggle("open");
+filterMenu.querySelectorAll("button[data-filter]").forEach(btn=>btn.onclick=()=>{document.getElementById("f").value=btn.dataset.filter;filterMenu.querySelectorAll("button").forEach(b=>b.classList.remove("active"));btn.classList.add("active");filterBtn.textContent=btn.dataset.filter==="all"?"⚙️ Filtros":btn.dataset.filter==="monitor"?"🟡 Monitor":"🔴 Monitor zerados";filterMenu.classList.remove("open");render();});
+document.addEventListener("click",e=>{if(filterWrap&&!filterWrap.contains(e.target))filterMenu.classList.remove("open")});
+themeBtn.onclick=()=>{
+  document.body.classList.toggle("dark");
+  const dark=document.body.classList.contains("dark");
+  themeBtn.textContent=dark?"☀️ Claro":"🌙 Dark";
+  localStorage.setItem("jetTheme",dark?"dark":"light");
+};
+if(localStorage.getItem("jetTheme")==="dark"){document.body.classList.add("dark");themeBtn.textContent="☀️ Claro"}else themeBtn.textContent="🌙 Dark";
+infoBtn.onclick=()=>{infoPanel.classList.toggle("open"); if(infoPanel.classList.contains("open")){loadBikes(); infoPanel.scrollIntoView({behavior:"smooth"});}};
+mapSearch.oninput=()=>{
+  const q=mapSearch.value.toLowerCase().trim();
+  searchSuggestions.innerHTML="";
+  if(!q){searchSuggestions.classList.remove("open");render();return}
+  const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const nq=norm(q);
+  const hits=P.filter(x=>norm(x.name).includes(nq)||norm(x.region).includes(nq)).slice(0,8);
+  hits.forEach(x=>{
+    const b=document.createElement("button");
+    b.innerHTML=`<strong>${x.name}</strong><small>${x.region||"Brasília"}</small>`;
+    b.onclick=()=>{
+      mapSearch.value=x.name; searchSuggestions.classList.remove("open");
+      if(map) map.flyTo({center:[x.longitude,x.latitude],zoom:17,duration:700});
+      const marker=markers.find(m=>m.__parkingId===x.id); if(marker) marker.openPopup();
+    };
+    searchSuggestions.appendChild(b);
+  });
+  if(hits.length) searchSuggestions.classList.add("open");
+};
+document.addEventListener("click",e=>{if(!e.target.closest(".search-box")) searchSuggestions.classList.remove("open")});
+</script>
+<script>if("serviceWorker" in navigator && location.protocol!=="file:"){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script></body></html>

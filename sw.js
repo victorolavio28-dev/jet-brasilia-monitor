@@ -1,11 +1,59 @@
-const CACHE='jet-monitor-v1';
-const APP=['./','./jet_brasilia_monitor_v3_mapa.html','./manifest.json','./icon-192.svg','./icon-512.svg'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(APP)).then(()=>self.skipWaiting()))});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET') return;
-  const u=new URL(e.request.url);
-  if(u.origin===location.origin){
-    e.respondWith(caches.match(e.request).then(cached=>cached||fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r}).catch(()=>cached)));
+/* JET Brasília Monitor — Service Worker
+   Estratégia: rede primeiro para evitar versões antigas após atualizações.
+*/
+
+const CACHE_NAME = "jet-brasilia-monitor-v4";
+
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter(key => key.startsWith("jet-brasilia-monitor-") && key !== CACHE_NAME)
+        .map(key => caches.delete(key))
+    );
+
+    await self.clients.claim();
+  })());
+});
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+
+  try {
+    const freshRequest = new Request(request, { cache: "no-store" });
+    const response = await fetch(freshRequest);
+
+    if (response && response.ok) {
+      await cache.put(request, response.clone());
+    }
+
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    if (request.mode === "navigate") {
+      const index = await cache.match("/index.html") || await cache.match("/");
+      if (index) return index;
+    }
+
+    throw error;
   }
+}
+
+self.addEventListener("fetch", event => {
+  const request = event.request;
+
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  if (url.origin !== self.location.origin) return;
+
+  event.respondWith(networkFirst(request));
 });

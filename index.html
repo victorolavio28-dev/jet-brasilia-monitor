@@ -21,6 +21,8 @@ body.dark .popup-title{color:#172033}
 .subtle{color:#667085}
 .location-marker{width:18px;height:18px;border-radius:50%;background:#1677ff;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.35);position:relative}.location-marker:after{content:"";position:absolute;inset:-9px;border:2px solid rgba(22,119,255,.35);border-radius:50%;animation:locpulse 1.8s infinite}.location-label{background:rgba(255,255,255,.96);color:#172033;border:1px solid #d4dbe3;border-radius:8px;padding:4px 7px;font-size:11px;font-weight:800;box-shadow:0 3px 12px rgba(20,25,35,.18);white-space:nowrap;margin-top:-42px;margin-left:12px}.location-tools{position:absolute;right:12px;bottom:215px;z-index:5}.location-tools button{border:1px solid #d7dce2;background:rgba(255,255,255,.95);color:#172033;width:42px;height:42px;border-radius:11px;box-shadow:0 4px 16px rgba(20,25,35,.16);font-size:20px;cursor:pointer}@keyframes locpulse{0%{transform:scale(.75);opacity:.9}70%{transform:scale(1.25);opacity:0}100%{transform:scale(.75);opacity:0}}
 body.dark .location-tools button{background:rgba(17,25,35,.94);color:#eef3f8;border-color:#344354}.location-label.dark{background:rgba(17,25,35,.96);color:#eef3f8;border-color:#344354}
+body.dark .rotate-tools{background:rgba(17,25,35,.92)}body.dark .rotate-tools button{background:#111923;color:#eef3f8}body.dark .rotate-tools #north{color:#74b5ff}
+body.dark .maplibregl-ctrl-group{background:#111923!important;border-color:#344354!important}body.dark .maplibregl-ctrl-group button{background-color:#111923!important}body.dark .maplibregl-ctrl-icon{filter:invert(1)}body.dark .maplibregl-ctrl-attrib{background:rgba(17,25,35,.78)!important;color:#c8d2df!important}body.dark .maplibregl-ctrl-attrib a{color:#dce8f5!important}
 
 @media(max-width:800px){.rotate-tools{bottom:105px;right:9px}.jet-marker{width:25px;height:25px}}
 .search-box{position:relative;min-width:210px}.search-suggestions{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel,#fff);border:1px solid rgba(127,127,127,.25);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden;z-index:2000}.search-suggestions.open{display:block}.search-suggestions button{display:block;width:100%;padding:10px 12px;text-align:left;border:0;background:transparent;color:inherit;cursor:pointer}.search-suggestions button:hover{background:rgba(127,127,127,.12)}.search-suggestions strong,.search-suggestions small{display:block}.search-suggestions small{opacity:.65;margin-top:2px}</style>
@@ -60,27 +62,118 @@ body.dark{--bg:#080d14;--panel:#111923;--text:#eef3f8;--muted:#9ba9ba;--line:#25
 <script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script><script>
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
 let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
+let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, techzoneCount=0;
 
-const blankStyle={
-  version:8,
-  sources:{
-    osm:{type:"raster",tiles:["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],tileSize:256,attribution:"© OpenStreetMap contributors"}
-  },
-  layers:[
-    {id:"osm",type:"raster",source:"osm",paint:{
-      "raster-saturation":0.15,
-      "raster-contrast":0.08,
-      "raster-brightness-min":0.08,
-      "raster-brightness-max":0.92,
-      "raster-opacity":0.92
-    }}
-  ]
-};
+// Mapa mais clean: CARTO Positron no modo claro e Dark Matter no modo escuro.
+// Ambos mantêm ruas, parques, água, hospitais e referências principais com menos poluição visual.
+function baseMapStyle(dark=false){
+  const tiles=dark
+    ? ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png","https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"]
+    : ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"];
+  return {
+    version:8,
+    sources:{
+      base:{type:"raster",tiles,tileSize:256,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank">CARTO</a>'}
+    },
+    layers:[{id:"base",type:"raster",source:"base",paint:{"raster-opacity":1}}]
+  };
+}
+
+function ringArea(ring){
+  let a=0;
+  for(let i=0;i<ring.length-1;i++) a+=ring[i][0]*ring[i+1][1]-ring[i+1][0]*ring[i][1];
+  return a/2;
+}
+function orientRing(ring,wantCCW){
+  const isCCW=ringArea(ring)>0;
+  return isCCW===wantCCW?ring:ring.slice().reverse();
+}
+function closeRing(ring){
+  if(!ring.length)return ring;
+  const a=ring[0],b=ring[ring.length-1];
+  return a[0]===b[0]&&a[1]===b[1]?ring:ring.concat([[a[0],a[1]]]);
+}
+
+function buildTechzoneMask(rings){
+  // Retângulo amplo envolvendo o DF; os polígonos das Techzones viram "furos" transparentes.
+  const outer=orientRing([[-49.7,-17.2],[-46.8,-17.2],[-46.8,-14.8],[-49.7,-14.8],[-49.7,-17.2]],true);
+  const holes=rings.map(r=>orientRing(closeRing(r),false));
+  return {type:"Feature",properties:{},geometry:{type:"Polygon",coordinates:[outer,...holes]}};
+}
+
+function renderTechzones(){
+  if(!map||!map.isStyleLoaded()||!techzoneMask)return;
+  const dark=document.body.classList.contains("dark");
+
+  if(map.getSource("jet-outside-mask")) map.getSource("jet-outside-mask").setData(techzoneMask);
+  else map.addSource("jet-outside-mask",{type:"geojson",data:techzoneMask});
+
+  if(map.getSource("jet-techzones")) map.getSource("jet-techzones").setData(techzoneGeoJSON);
+  else map.addSource("jet-techzones",{type:"geojson",data:techzoneGeoJSON});
+
+  if(!map.getLayer("jet-outside-mask")) map.addLayer({
+    id:"jet-outside-mask",type:"fill",source:"jet-outside-mask",
+    paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.24:.17}
+  });
+  else {
+    map.setPaintProperty("jet-outside-mask","fill-color",dark?"#a91525":"#ef4055");
+    map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.24:.17);
+  }
+
+  if(!map.getLayer("jet-zone-fill")) map.addLayer({
+    id:"jet-zone-fill",type:"fill",source:"jet-techzones",
+    paint:{"fill-color":dark?"#ffffff":"#ffffff","fill-opacity":dark?.025:.055}
+  });
+  else map.setPaintProperty("jet-zone-fill","fill-opacity",dark?.025:.055);
+
+  if(!map.getLayer("jet-zone-line")) map.addLayer({
+    id:"jet-zone-line",type:"line",source:"jet-techzones",
+    paint:{"line-color":dark?"#ff5364":"#df2940","line-width":["interpolate",["linear"],["zoom"],9,1.4,14,2.4,18,3.1],"line-opacity":.92}
+  });
+  else map.setPaintProperty("jet-zone-line","line-color",dark?"#ff5364":"#df2940");
+}
+
+async function loadTechzones(){
+  try{
+    const listResp=await fetch(`${B}/techzones?city_id=${C}`,{cache:"no-store"});
+    if(!listResp.ok)throw new Error(`Techzones: HTTP ${listResp.status}`);
+    const list=await listResp.json();
+    if(!Array.isArray(list))throw new Error("Resposta de Techzones inválida");
+
+    const details=await Promise.all(list.map(async z=>{
+      try{
+        const r=await fetch(`${B}/techzones/${z.id}`,{cache:"no-store"});
+        if(!r.ok)return null;
+        const d=await r.json();
+        const pts=Array.isArray(d.coordinates)?d.coordinates:[];
+        const ring=closeRing(pts.map(p=>[Number(p.lon),Number(p.lat)]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1])));
+        if(ring.length<4)return null;
+        return {id:d.id||z.id,name:d.name||z.name||"Zona JET",ring:orientRing(ring,true)};
+      }catch(_){return null}
+    }));
+
+    const valid=details.filter(Boolean);
+    techzoneCount=valid.length;
+    techzoneGeoJSON={
+      type:"FeatureCollection",
+      features:valid.map(z=>({type:"Feature",properties:{id:z.id,name:z.name},geometry:{type:"Polygon",coordinates:[z.ring]}}))
+    };
+    techzoneMask=buildTechzoneMask(valid.map(z=>z.ring));
+    renderTechzones();
+  }catch(e){
+    console.warn("Não foi possível carregar as Techzones da JET:",e);
+  }
+}
+
+function applyMapTheme(dark){
+  if(!map)return;
+  map.setStyle(baseMapStyle(dark),{diff:false});
+}
 
 function initMap(){
   map=new maplibregl.Map({
     container:"map",
-    style:blankStyle,
+    style:baseMapStyle(localStorage.getItem("jetTheme")==="dark"),
     center:[-47.89,-15.79],
     zoom:11.8,
     bearing:0,
@@ -107,7 +200,8 @@ function initMap(){
   document.getElementById("map").appendChild(loc);
   document.getElementById("myLocation").onclick=()=>requestLocation(true);
 
-  map.on("load",()=>{render(); requestLocation(false);});
+  map.on("load",()=>{render(); requestLocation(false); loadTechzones();});
+  map.on("style.load",()=>{renderTechzones(); render();});
   map.on("moveend",()=>render());
   map.on("zoomend",()=>render());
 }
@@ -250,7 +344,7 @@ async function load(){try{
 
 async function loadBikes(){if(bikesLoaded)return; try{S=await all("bikes");bikesLoaded=true;document.getElementById("b").textContent=S.length.toLocaleString("pt-BR");let v=S.map(x=>+x.battery_percent).filter(Number.isFinite);document.getElementById("bat").textContent=v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)+"%":"—";render();}catch(e){document.getElementById("s").textContent="Erro ao consultar patinetes: "+e.message}}
 initMap();
-document.getElementById("r").onclick=load;document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Filtros":v==="monitor"?"🟡 Monitor":"🔴 Monitor zerados";render();};document.getElementById("q").oninput=render;load();setInterval(load,60000);
+document.getElementById("r").onclick=()=>{load();loadTechzones()};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Filtros":v==="monitor"?"🟡 Monitor":"🔴 Monitor zerados";render();};document.getElementById("q").oninput=render;load();setInterval(load,60000);setInterval(loadTechzones,600000);
 </script>
 <script>
 const themeBtn=document.getElementById("themeBtn"),infoBtn=document.getElementById("infoBtn"),infoPanel=document.getElementById("infoPanel"),mapSearch=document.getElementById("mapSearch"),searchSuggestions=document.getElementById("searchSuggestions"),filterBtn=document.getElementById("filterBtn"),filterMenu=document.getElementById("filterMenu"),filterWrap=document.querySelector(".filter-wrap");
@@ -268,6 +362,7 @@ themeBtn.onclick=()=>{
   const dark=document.body.classList.contains("dark");
   themeBtn.textContent=dark?"☀️ Claro":"🌙 Dark";
   localStorage.setItem("jetTheme",dark?"dark":"light");
+  applyMapTheme(dark);
 };
 if(localStorage.getItem("jetTheme")==="dark"){document.body.classList.add("dark");themeBtn.textContent="☀️ Claro"}else themeBtn.textContent="🌙 Dark";
 infoBtn.onclick=()=>{infoPanel.classList.toggle("open"); if(infoPanel.classList.contains("open")){loadBikes(); infoPanel.scrollIntoView({behavior:"smooth"});}};

@@ -10,7 +10,7 @@ body{margin:0;background:#090b12;color:#f4f6fb;font:14px system-ui}header{paddin
 .rotate-tools button:hover{background:#edf1f5}
 .rotate-tools #north{font-size:13px;color:#1677ff}
 .jet-marker{width:27px;height:27px;border:2px solid rgba(255,255,255,.95);border-radius:50%;box-shadow:0 2px 7px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;color:#07110e;font-size:11px;font-weight:900;box-sizing:border-box;transition:transform .15s}
-.jet-marker:hover{transform:scale(1.22)}
+.jet-cluster{width:38px;height:38px;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.22);font-size:13px;font-weight:900;color:#07110e;cursor:pointer}.jet-marker:hover{transform:scale(1.22)}
 .move-badge{position:absolute;top:-10px;right:-13px;min-width:21px;height:18px;padding:0 4px;border:2px solid #fff;border-radius:10px;background:#172033;color:#fff;font-size:10px;font-weight:900;line-height:14px;text-align:center;box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.28);pointer-events:none;z-index:2}
 .popup{color:#202733;font-size:13px;line-height:1.55}.popup b{font-size:14px}.popup small{color:#727b89}
 .parking-popup{width:100%;max-width:300px}.popup-title{font-size:16px;font-weight:800;margin-bottom:6px;color:#172033}.popup-row{font-size:13px;margin-bottom:6px}.popup-status{font-weight:800;margin:5px 0}.popup-update{font-size:11px;color:#727b89;margin-bottom:9px}.popup-nav{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.nav-btn{display:flex;align-items:center;justify-content:center;text-decoration:none;border-radius:9px;padding:9px 6px;font-size:12px;font-weight:800;color:#fff!important}.nav-btn.google{background:#4285f4}.nav-btn.waze{background:#1598ff}.parking-guide-btn{width:100%;border:1px solid #d4dbe3;background:#f4f7fa;color:#172033;border-radius:9px;padding:9px 8px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:none}.parking-guide{display:none;margin-top:8px}.parking-guide.open{display:block}.parking-guide img{display:block;width:100%;height:auto;max-height:240px;object-fit:cover;border-radius:10px;border:1px solid #e1e5ea}.parking-guide-btn:active{transform:scale(.99)}
@@ -63,6 +63,7 @@ body.dark{--bg:#080d14;--panel:#111923;--text:#eef3f8;--muted:#9ba9ba;--line:#25
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><script>
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
 let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
+let allowedGeometry=null, basePaints=new Map();
 let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, techzoneCount=0;
 
 // Base cartográfica vetorial com equilíbrio entre detalhe e limpeza visual.
@@ -75,7 +76,7 @@ function baseMapStyle(dark=false){
 }
 
 function tuneBaseMap(dark=false){
-  if(!map || dark)return;
+  if(!map)return;
   const style=map.getStyle();
   if(!style || !Array.isArray(style.layers))return;
 
@@ -83,7 +84,20 @@ function tuneBaseMap(dark=false){
   // mas neutraliza o amarelo/laranja das vias para um mapa mais clean.
   style.layers.forEach(layer=>{
     try{
-      if(layer.type!=="line")return;
+      if(layer.id.startsWith("jet-"))return;
+      if(!basePaints.has(layer.id))basePaints.set(layer.id,{paint:{...layer.paint},filter:layer.filter});
+      const original=basePaints.get(layer.id);
+      if(allowedGeometry && layer.type==="fill-extrusion"){
+        const inside=["within",allowedGeometry];
+        map.setFilter(layer.id,original.filter?["all",original.filter,inside]:inside);
+      }
+      if(allowedGeometry && (layer.type==="fill" || layer.type==="background")){
+        const key=layer.type+"-color", color=original.paint[key];
+        const gray=dark?"#343a40":"#e1e4e7";
+        if(layer.type==="fill" && color!==undefined)
+          map.setPaintProperty(layer.id,key,["case",["within",allowedGeometry],color,gray]);
+      }
+      if(layer.type!=="line" || dark)return;
       const id=String(layer.id||"").toLowerCase();
       const sourceLayer=String(layer["source-layer"]||"").toLowerCase();
       const looksLikeRoad=/road|street|highway|motorway|trunk|primary|secondary|tertiary|residential|service|living|pedestrian|bridge|tunnel/.test(id);
@@ -168,12 +182,12 @@ function renderTechzones(){
 
     if(!map.getLayer("jet-outside-mask")) map.addLayer({
       id:"jet-outside-mask",type:"fill",source:"jet-outside-mask",
-      paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.20:.105}
+      paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.14:.075}
     });
     else {
       map.setLayoutProperty("jet-outside-mask","visibility","visible");
       map.setPaintProperty("jet-outside-mask","fill-color",dark?"#a91525":"#ef4055");
-      map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.20:.105);
+      map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.14:.075);
     }
   }else if(map.getLayer("jet-outside-mask")){
     map.setLayoutProperty("jet-outside-mask","visibility","none");
@@ -186,17 +200,17 @@ function renderTechzones(){
   else map.setPaintProperty("jet-zone-fill","fill-opacity",0);
 
   const zoneWidth=dark
-    ? ["interpolate",["linear"],["zoom"],9,1.8,14,2.8,18,3.5]
-    : ["interpolate",["linear"],["zoom"],9,1.4,14,2.35,18,2.9];
+    ? ["interpolate",["linear"],["zoom"],9,1,14,1.6,18,2.1]
+    : ["interpolate",["linear"],["zoom"],9,.8,14,1.35,18,1.8];
   if(!map.getLayer("jet-zone-line")) map.addLayer({
-    id:"jet-zone-line",type:"line",source:"jet-techzones",
-    paint:{"line-color":dark?"#ff5267":"#df3348","line-width":zoneWidth,"line-opacity":dark?.98:.90}
+    id:"jet-zone-line",type:"line",source:"jet-techzones",layout:{"line-join":"round","line-cap":"round"},
+    paint:{"line-color":dark?"#ff5267":"#df3348","line-width":zoneWidth,"line-opacity":dark?.85:.78}
   });
   else {
     map.setLayoutProperty("jet-zone-line","visibility","visible");
     map.setPaintProperty("jet-zone-line","line-color",dark?"#ff5267":"#df3348");
     map.setPaintProperty("jet-zone-line","line-width",zoneWidth);
-    map.setPaintProperty("jet-zone-line","line-opacity",dark?.98:.90);
+    map.setPaintProperty("jet-zone-line","line-opacity",dark?.85:.78);
   }
 }
 
@@ -226,6 +240,8 @@ async function loadTechzones(){
       features:valid.map(z=>({type:"Feature",properties:{id:z.id,name:z.name},geometry:{type:"Polygon",coordinates:[z.ring]}}))
     };
     techzoneMask=buildTechzoneMask(valid.map(z=>z.ring));
+    allowedGeometry=techzoneMask?{type:"MultiPolygon",coordinates:techzoneMask.geometry.coordinates.slice(1).map(r=>[orientRing(r,true)])}:null;
+    tuneBaseMap(document.body.classList.contains("dark"));
     renderTechzones();
   }catch(e){
     console.warn("Não foi possível carregar as Techzones da JET:",e);
@@ -234,6 +250,7 @@ async function loadTechzones(){
 
 function applyMapTheme(dark){
   if(!map)return;
+  basePaints.clear();
   map.setStyle(baseMapStyle(dark),{diff:false});
   // setStyle remove sources/layers customizados. Recoloca as Techzones assim que
   // o novo estilo estiver pronto, evitando que as delimitações sumam no Dark Mode.
@@ -287,7 +304,7 @@ function initMap(){
     render();
   });
   map.on("moveend",()=>render());
-  map.on("zoomend",()=>render());
+
 }
 
 async function all(x){
@@ -337,7 +354,41 @@ function render(){
     if(x.latitude==null||x.longitude==null)return false;
     return true;
   });
+  // Group nearby points in screen space, keeping all underlying parking records.
+  const groups=[], cells=new Map(), cellSize=46;
   visible.forEach(x=>{
+    const pt=map.project([Number(x.longitude),Number(x.latitude)]);
+    const cx=Math.floor(pt.x/cellSize),cy=Math.floor(pt.y/cellSize);
+    let group;
+    if(map.getZoom()<17){
+      for(let dx=-1;dx<=1&&!group;dx++)for(let dy=-1;dy<=1&&!group;dy++){
+        const candidates=cells.get(`${cx+dx},${cy+dy}`)||[];
+        group=candidates.find(g=>Math.hypot(pt.x-g.x,pt.y-g.y)<cellSize);
+      }
+    }
+    if(group)group.items.push(x);
+    else{
+      group={x:pt.x,y:pt.y,items:[x]};groups.push(group);
+      const key=`${cx},${cy}`;if(!cells.has(key))cells.set(key,[]);cells.get(key).push(group);
+    }
+  });
+  groups.forEach(group=>{
+    if(group.items.length>1){
+      const items=group.items, el=document.createElement("button");
+      const priority=Math.min(...items.map(x=>!isMonitor(x)?4:stat(x)[1]==="bad"?0:stat(x)[1]==="orange"?1:stat(x)[1]==="warn"?2:3));
+      el.className="jet-cluster";el.style.background=["#ff3b30","#ff9500","#ffc857","#21d19a","#1677ff"][priority];
+      el.textContent=items.length;el.title=`${items.length} estacionamentos — toque para aproximar`;
+      el.setAttribute("aria-label",el.title);
+      const lng=items.reduce((a,x)=>a+Number(x.longitude),0)/items.length;
+      const lat=items.reduce((a,x)=>a+Number(x.latitude),0)/items.length;
+      el.onclick=()=>{
+        const bounds=new maplibregl.LngLatBounds();items.forEach(x=>bounds.extend([Number(x.longitude),Number(x.latitude)]));
+        map.fitBounds(bounds,{padding:90,maxZoom:18,duration:450});
+      };
+      markers.push(new maplibregl.Marker({element:el}).setLngLat([lng,lat]).addTo(map));
+      return;
+    }
+    const x=group.items[0];
     if(x.latitude==null)return;
     let [st,cl]=stat(x);
     const n=+x.bikes_count||0,t=+x.target_bikes_count||0;
@@ -463,7 +514,7 @@ mapSearch.oninput=()=>{
     b.onclick=()=>{
       mapSearch.value=x.name; searchSuggestions.classList.remove("open");
       if(map) map.flyTo({center:[x.longitude,x.latitude],zoom:17,duration:700});
-      const marker=markers.find(m=>m.__parkingId===x.id); if(marker) marker.openPopup();
+      map.once("moveend",()=>{const marker=markers.find(m=>m.__parkingId===x.id);if(marker)marker.openPopup();});
     };
     searchSuggestions.appendChild(b);
   });

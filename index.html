@@ -62,7 +62,8 @@ body.dark{--bg:#080d14;--panel:#111923;--text:#eef3f8;--muted:#9ba9ba;--line:#25
 <script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><script>
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
-let scootersVisible=false, bikesRequest=null, scooterPopup=null;
+let scootersVisible=false, bikesRequest=null, scooterPopup=null, bikesUpdatedAt=0;
+const scooterSourceVersions=new WeakMap();
 let scooterData={type:"FeatureCollection",features:[]};
 let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
 let allowedGeometry=null, basePaints=new Map();
@@ -315,10 +316,19 @@ function initMap(){
 }
 
 async function all(x){
-  let a=await fetch(`${B}/${x}?city_id=${C}&page=1&limit=1000`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}),v=a.entries||[];
-  for(let i=2;i<=+a.total_pages;i++)
-    v=v.concat((await fetch(`${B}/${x}?city_id=${C}&page=${i}&limit=1000`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()})).entries||[]);
-  return v
+  const page=async i=>{
+    const r=await fetch(`${B}/${x}?city_id=${C}&page=${i}&limit=1000`,{cache:"no-store"});
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  };
+  const first=await page(1), entries=[...(first.entries||[])];
+  // Consulta as páginas restantes em paralelo (até quatro por vez).
+  for(let start=2;start<=Number(first.total_pages);start+=4){
+    const numbers=Array.from({length:Math.min(4,Number(first.total_pages)-start+1)},(_,i)=>start+i);
+    const pages=await Promise.all(numbers.map(page));
+    pages.forEach(p=>entries.push(...(p.entries||[])));
+  }
+  return entries;
 }
 
 function isMonitor(x){
@@ -465,8 +475,13 @@ function bikeFeatures(bikes){
 }
 function renderScooters(){
   if(!map||!map.isStyleLoaded())return;
-  if(map.getSource("jet-scooters"))map.getSource("jet-scooters").setData(scooterData);
-  else map.addSource("jet-scooters",{type:"geojson",data:scooterData});
+  let source=map.getSource("jet-scooters");
+  if(!source){
+    map.addSource("jet-scooters",{type:"geojson",data:scooterData});
+    source=map.getSource("jet-scooters");scooterSourceVersions.set(source,scooterData);
+  }else if(scooterSourceVersions.get(source)!==scooterData){
+    source.setData(scooterData);scooterSourceVersions.set(source,scooterData);
+  }
   if(!map.getLayer("jet-scooter-points"))map.addLayer({
     id:"jet-scooter-points",type:"circle",source:"jet-scooters",
     layout:{visibility:scootersVisible?"visible":"none"},
@@ -498,7 +513,7 @@ async function loadBikes(force=false){
   if(bikesLoaded&&!force){renderScooters();return true;}
   bikesRequest=(async()=>{
     try{
-      const next=await all("bikes");S=next;bikesLoaded=true;scooterData=bikeFeatures(S);
+      const next=await all("bikes");S=next;bikesLoaded=true;bikesUpdatedAt=Date.now();scooterData=bikeFeatures(S);
       document.getElementById("b").textContent=S.length.toLocaleString("pt-BR");
       const v=S.filter(x=>x.battery_percent!=null).map(x=>Number(x.battery_percent)).filter(Number.isFinite);
       document.getElementById("bat").textContent=v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)+"%":"—";
@@ -513,7 +528,7 @@ async function loadBikes(force=false){
 }
 
 initMap();
-document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Filtros":v==="monitor"?"🟡 Monitor":"🔴 Monitor zerados";render();};document.getElementById("q").oninput=render;load();setInterval(()=>{load();if(scootersVisible)loadBikes(true)},60000);setInterval(loadTechzones,600000);
+document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Filtros":v==="monitor"?"🟡 Monitor":"🔴 Monitor zerados";render();};document.getElementById("q").oninput=render;load().then(()=>loadBikes());setInterval(()=>{load();if(scootersVisible)loadBikes(true)},60000);setInterval(loadTechzones,600000);
 </script>
 <script>
 const scooterBtn=document.getElementById("scooterBtn");
@@ -521,7 +536,7 @@ scooterBtn.onclick=async()=>{
   scootersVisible=!scootersVisible;updateScooterButton();renderScooters();
   if(!scootersVisible){if(scooterPopup)scooterPopup.remove();return;}
   if(!bikesLoaded)scooterBtn.textContent="🛴 Carregando…";
-  await loadBikes();
+  await loadBikes(bikesLoaded&&Date.now()-bikesUpdatedAt>60000);
 };
 updateScooterButton();
 const themeBtn=document.getElementById("themeBtn"),infoBtn=document.getElementById("infoBtn"),infoPanel=document.getElementById("infoPanel"),mapSearch=document.getElementById("mapSearch"),searchSuggestions=document.getElementById("searchSuggestions"),filterBtn=document.getElementById("filterBtn"),filterMenu=document.getElementById("filterMenu"),filterWrap=document.querySelector(".filter-wrap");

@@ -12,8 +12,8 @@ body{margin:0;background:#090b12;color:#f4f6fb;font:14px system-ui}header{paddin
 .jet-marker:hover{box-shadow:0 3px 10px rgba(0,0,0,.35)}
 .move-badge{position:absolute;top:-10px;right:-13px;min-width:21px;height:18px;padding:0 4px;border:2px solid #fff;border-radius:10px;background:#172033;color:#fff;font-size:10px;font-weight:900;line-height:14px;text-align:center;box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.28);pointer-events:none;z-index:2}
 .popup{color:#202733;font-size:13px;line-height:1.55}.popup b{font-size:14px}.popup small{color:#727b89}
-.parking-popup{width:100%;max-width:300px}.popup-title{font-size:16px;font-weight:800;margin-bottom:6px;color:#172033}.popup-row{font-size:13px;margin-bottom:6px}.popup-status{font-weight:800;margin:5px 0}.popup-update{font-size:11px;color:#727b89;margin-bottom:9px}.popup-nav{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.nav-btn{display:flex;align-items:center;justify-content:center;text-decoration:none;border-radius:9px;padding:9px 6px;font-size:12px;font-weight:800;color:#fff!important}.nav-btn.google{background:#4285f4}.nav-btn.waze{background:#1598ff}.parking-guide-btn{width:100%;border:1px solid #d4dbe3;background:#f4f7fa;color:#172033;border-radius:9px;padding:9px 8px;font-size:12px;font-weight:800;cursor:pointer;box-shadow:none}.parking-guide{display:none;margin-top:8px}.parking-guide.open{display:block}.parking-guide img{display:block;width:100%;height:auto;max-height:240px;object-fit:cover;border-radius:10px;border:1px solid #e1e5ea}.parking-guide-btn:active{transform:scale(.99)}
-body.dark .parking-guide-btn{background:#202c3a;color:#eef3f8;border-color:#344354}
+.parking-popup{width:100%;max-width:300px}.popup-title{font-size:16px;font-weight:800;margin-bottom:6px;color:#172033}.popup-row{font-size:13px;margin-bottom:6px}.popup-status{font-weight:800;margin:5px 0}.popup-update{font-size:11px;color:#727b89;margin-bottom:9px}.popup-nav{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}.nav-btn{display:flex;align-items:center;justify-content:center;text-decoration:none;border-radius:9px;padding:9px 6px;font-size:12px;font-weight:800;color:#fff!important}.nav-btn.google{background:#4285f4}.nav-btn.waze{background:#1598ff}
+
 body.dark .popup-title{color:#172033}
 
 .maplibregl-popup-content{border-radius:12px!important;box-shadow:0 8px 30px rgba(0,0,0,.18)!important}
@@ -451,8 +451,6 @@ function render(){
           <a class="nav-btn google" href="${googleUrl}" target="_blank" rel="noopener">🗺️ Google Maps</a>
           <a class="nav-btn waze" href="${wazeUrl}" target="_blank" rel="noopener">🚗 Waze</a>
         </div>
-        <button class="parking-guide-btn" type="button" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'📷 Ocultar como estacionar':'📷 Como estacionar?'">📷 Como estacionar?</button>
-        <div class="parking-guide"><img src="como-estacionar.jpg" alt="Exemplo de como estacionar o patinete"></div>
       </div>`
     );
     const marker=new maplibregl.Marker({element:el,anchor:"center",rotationAlignment:"viewport",pitchAlignment:"viewport",subpixelPositioning:true})
@@ -559,7 +557,8 @@ function showScooterPopup(e,fromSearch=false){
   const parking=P.find(p=>String(p.id)===x.parkingId);
   const lines=[`Bateria: ${x.battery==null?"—":x.battery+"%"}`,`Status: ${x.status}`,x.parkingId?`Estacionamento: ${parking?parking.name:"Vinculado a estacionamento"}`:"Sem estacionamento vinculado"];
   lines.forEach(text=>{const line=document.createElement("div");line.textContent=text;box.appendChild(line)});
-  if(!x.parkingId){
+  {
+    // Rotas disponíveis mesmo com vínculo de estacionamento presente ou desatualizado.
     const nav=document.createElement("div");nav.className="popup-nav";
     const [lng,lat]=feature.geometry.coordinates;
     [["🗺️ Google Maps",`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,"google"],["🚗 Waze",`https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`,"waze"]].forEach(([label,url,kind])=>{

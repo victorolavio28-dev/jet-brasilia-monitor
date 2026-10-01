@@ -59,7 +59,8 @@ body.dark{--bg:#080d14;--panel:#111923;--text:#eef3f8;--muted:#9ba9ba;--line:#25
 </style></head><body>
 <header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 60s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option></select><input id="q" placeholder="Buscar ponto"></div></header>
 <main><div id="map"></div><div class="map-topbar"><div class="search-box"><input id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Buscar estacionamento..."><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">⚙️ Filtros</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button></div></div><section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Meta</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 30%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
-<script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script><script>
+<script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><script>
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
 let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
 let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, techzoneCount=0;
@@ -69,7 +70,7 @@ let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, t
 function baseMapStyle(dark=false){
   return dark
     ? "https://tiles.openfreemap.org/styles/dark"
-    : "https://tiles.openfreemap.org/styles/positron";
+    : "https://tiles.openfreemap.org/styles/liberty";
 }
 
 function ringArea(ring){
@@ -88,42 +89,81 @@ function closeRing(ring){
 }
 
 function buildTechzoneMask(rings){
-  // Retângulo amplo envolvendo o DF; os polígonos das Techzones viram "furos" transparentes.
-  const outer=orientRing([[-49.7,-17.2],[-46.8,-17.2],[-46.8,-14.8],[-49.7,-14.8],[-49.7,-17.2]],true);
-  const holes=rings.map(r=>orientRing(closeRing(r),false));
-  return {type:"Feature",properties:{},geometry:{type:"Polygon",coordinates:[outer,...holes]}};
+  // Une primeiro todas as Techzones. Isso evita o efeito de "duplo furo":
+  // quando duas zonas se sobrepõem, a interseção não pode voltar a ficar vermelha.
+  const outer=orientRing(closeRing([[-49.7,-17.2],[-46.8,-17.2],[-46.8,-14.8],[-49.7,-14.8],[-49.7,-17.2]]),true);
+  if(!rings.length)return null;
+
+  try{
+    if(typeof turf==="undefined" || typeof turf.union!=="function") throw new Error("Turf indisponível");
+
+    let merged=turf.polygon([orientRing(closeRing(rings[0]),true)]);
+    for(let i=1;i<rings.length;i++){
+      const poly=turf.polygon([orientRing(closeRing(rings[i]),true)]);
+      const next=turf.union(merged,poly);
+      if(next)merged=next;
+    }
+
+    const g=merged && merged.geometry;
+    if(!g)return null;
+
+    // A máscara é um grande retângulo com a UNIÃO das áreas permitidas como furos.
+    // Assim, mesmo em zoom alto ou em regiões onde Techzones se encostam/sobrepõem,
+    // a área permitida continua transparente e não recebe o vermelho externo.
+    const allowedOuters=[];
+    if(g.type==="Polygon"){
+      if(g.coordinates && g.coordinates[0]) allowedOuters.push(g.coordinates[0]);
+    }else if(g.type==="MultiPolygon"){
+      (g.coordinates||[]).forEach(poly=>{ if(poly && poly[0]) allowedOuters.push(poly[0]); });
+    }
+
+    const holes=allowedOuters
+      .map(r=>orientRing(closeRing(r),false))
+      .filter(r=>r.length>=4);
+
+    if(!holes.length)return null;
+    return {type:"Feature",properties:{},geometry:{type:"Polygon",coordinates:[outer,...holes]}};
+  }catch(e){
+    console.warn("Não foi possível unir as Techzones; a máscara externa será ocultada para evitar áreas vermelhas incorretas.",e);
+    return null;
+  }
 }
 
 function renderTechzones(){
-  if(!map||!map.isStyleLoaded()||!techzoneMask)return;
+  if(!map||!map.isStyleLoaded())return;
   const dark=document.body.classList.contains("dark");
-
-  if(map.getSource("jet-outside-mask")) map.getSource("jet-outside-mask").setData(techzoneMask);
-  else map.addSource("jet-outside-mask",{type:"geojson",data:techzoneMask});
 
   if(map.getSource("jet-techzones")) map.getSource("jet-techzones").setData(techzoneGeoJSON);
   else map.addSource("jet-techzones",{type:"geojson",data:techzoneGeoJSON});
 
-  if(!map.getLayer("jet-outside-mask")) map.addLayer({
-    id:"jet-outside-mask",type:"fill",source:"jet-outside-mask",
-    paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.20:.14}
-  });
-  else {
-    map.setPaintProperty("jet-outside-mask","fill-color",dark?"#a91525":"#ef4055");
-    map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.20:.14);
+  if(techzoneMask){
+    if(map.getSource("jet-outside-mask")) map.getSource("jet-outside-mask").setData(techzoneMask);
+    else map.addSource("jet-outside-mask",{type:"geojson",data:techzoneMask});
+
+    if(!map.getLayer("jet-outside-mask")) map.addLayer({
+      id:"jet-outside-mask",type:"fill",source:"jet-outside-mask",
+      paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.16:.105}
+    });
+    else {
+      map.setLayoutProperty("jet-outside-mask","visibility","visible");
+      map.setPaintProperty("jet-outside-mask","fill-color",dark?"#a91525":"#ef4055");
+      map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.16:.105);
+    }
+  }else if(map.getLayer("jet-outside-mask")){
+    map.setLayoutProperty("jet-outside-mask","visibility","none");
   }
 
   if(!map.getLayer("jet-zone-fill")) map.addLayer({
     id:"jet-zone-fill",type:"fill",source:"jet-techzones",
-    paint:{"fill-color":dark?"#ffffff":"#ffffff","fill-opacity":dark?.025:.055}
+    paint:{"fill-color":dark?"#ffffff":"#ffffff","fill-opacity":0}
   });
-  else map.setPaintProperty("jet-zone-fill","fill-opacity",dark?.025:.055);
+  else map.setPaintProperty("jet-zone-fill","fill-opacity",0);
 
   if(!map.getLayer("jet-zone-line")) map.addLayer({
     id:"jet-zone-line",type:"line",source:"jet-techzones",
-    paint:{"line-color":dark?"#ff5364":"#df2940","line-width":["interpolate",["linear"],["zoom"],9,1.4,14,2.4,18,3.1],"line-opacity":.92}
+    paint:{"line-color":dark?"#ff6170":"#df3348","line-width":["interpolate",["linear"],["zoom"],9,1.4,14,2.35,18,2.9],"line-opacity":.90}
   });
-  else map.setPaintProperty("jet-zone-line","line-color",dark?"#ff5364":"#df2940");
+  else map.setPaintProperty("jet-zone-line","line-color",dark?"#ff6170":"#df3348");
 }
 
 async function loadTechzones(){

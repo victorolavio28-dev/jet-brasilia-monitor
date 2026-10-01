@@ -119,10 +119,15 @@ async function all(x){
   return v
 }
 
+function isMonitor(x){
+  const v=x && x.monitor;
+  return v===true || v===1 || v==="1" || String(v).toLowerCase()==="true";
+}
+
 function stat(x){
   const n=+x.bikes_count||0,t=+x.target_bikes_count||0;
   // Fora do monitor é sempre azul, independentemente da quantidade.
-  if(!x.monitor)return["Fora do monitor","offmonitor"];
+  if(!isMonitor(x))return["Fora do monitor","offmonitor"];
   // Prioridade: monitor zerado > 1 patinete > abaixo da meta > meta atingida/superada.
   if(n===0)return["Vazio — prioridade máxima","bad"];
   if(n===1)return["1 patinete — prioridade","orange"];
@@ -149,8 +154,8 @@ function render(){
   const visible=P.filter(x=>{
     let n=+x.bikes_count||0,t=+x.target_bikes_count||0;
     if(q&&!String(x.name).toLowerCase().includes(q))return false;
-    if(f=="monitor"&&!x.monitor)return false;
-    if(f=="monitor-zero"&&!(x.monitor&&n===0))return false;
+    if(f=="monitor"&&!isMonitor(x))return false;
+    if(f=="monitor-zero"&&!(isMonitor(x)&&n===0))return false;
     if(x.latitude==null||x.longitude==null)return false;
     return true;
   });
@@ -158,12 +163,12 @@ function render(){
     if(x.latitude==null)return;
     let [st,cl]=stat(x);
     const n=+x.bikes_count||0,t=+x.target_bikes_count||0;
-    const color=!x.monitor?"#1677ff":cl==="bad"?"#ff3b30":cl==="orange"?"#ff9500":cl==="warn"?"#ffc857":"#21d19a";
+    const color=!isMonitor(x)?"#1677ff":cl==="bad"?"#ff3b30":cl==="orange"?"#ff9500":cl==="warn"?"#ffc857":"#21d19a";
     const el=document.createElement("div");
     el.className="jet-marker";
     el.style.background=color;
     let movementBadge="";
-    if(x.monitor && t>0){
+    if(isMonitor(x) && t>0){
       if(n<t) movementBadge=`<span class="move-badge">+${t-n}</span>`;
       else if(n>t) movementBadge=`<span class="move-badge">−${n-t}</span>`;
     }
@@ -191,7 +196,7 @@ function render(){
     markers.push(marker);
   });
 
-  let a=P.filter(x=>(+x.bikes_count||0)==0||((+x.target_bikes_count||0)>0&&(+x.bikes_count||0)<(+x.target_bikes_count||0)))
+  let a=P.filter(x=>isMonitor(x)&&((+x.bikes_count||0)==0||((+x.target_bikes_count||0)>0&&(+x.bikes_count||0)<(+x.target_bikes_count||0))))
     .sort((a,b)=>(+a.bikes_count||0)-(+b.bikes_count||0)).slice(0,100);
 
   document.getElementById("att").innerHTML=a.map(x=>{
@@ -238,7 +243,7 @@ async function load(){try{
   P=await all("parkings");
   document.getElementById("p").textContent=P.length.toLocaleString("pt-BR");
   document.getElementById("z").textContent=P.filter(x=>(+x.bikes_count||0)==0).length.toLocaleString("pt-BR");
-  document.getElementById("m").textContent=P.filter(x=>x.monitor).length.toLocaleString("pt-BR");
+  document.getElementById("m").textContent=P.filter(x=>isMonitor(x)).length.toLocaleString("pt-BR");
   render();
   document.getElementById("s").textContent="Mapa carregado — dados de patinetes serão consultados quando necessários.";
 }catch(e){document.getElementById("s").textContent="Erro ao consultar a API: "+e.message}}

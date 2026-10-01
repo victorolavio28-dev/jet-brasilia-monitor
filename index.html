@@ -66,11 +66,35 @@ let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId
 let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, techzoneCount=0;
 
 // Base cartográfica vetorial com equilíbrio entre detalhe e limpeza visual.
-// OpenFreeMap não exige chave de API e mantém ruas, bairros, parques, água e referências urbanas.
+// No modo claro usamos Liberty para preservar parques verdes e água azul.
+// Depois do carregamento, as vias são clareadas para recuperar o visual de ruas brancas.
 function baseMapStyle(dark=false){
   return dark
     ? "https://tiles.openfreemap.org/styles/dark"
     : "https://tiles.openfreemap.org/styles/liberty";
+}
+
+function tuneBaseMap(dark=false){
+  if(!map || dark)return;
+  const style=map.getStyle();
+  if(!style || !Array.isArray(style.layers))return;
+
+  // Mantém as cores naturais do Liberty (parques/vegetação verdes e água azul),
+  // mas neutraliza o amarelo/laranja das vias para um mapa mais clean.
+  style.layers.forEach(layer=>{
+    try{
+      if(layer.type!=="line")return;
+      const id=String(layer.id||"").toLowerCase();
+      const sourceLayer=String(layer["source-layer"]||"").toLowerCase();
+      const looksLikeRoad=/road|street|highway|motorway|trunk|primary|secondary|tertiary|residential|service|living|pedestrian|bridge|tunnel/.test(id);
+      const transportRoad=sourceLayer==="transportation" && !/rail|tram|subway|ferry|runway|aeroway/.test(id);
+      if(!looksLikeRoad && !transportRoad)return;
+
+      const casing=/casing|outline|border/.test(id);
+      map.setPaintProperty(layer.id,"line-color",casing?"#d8dde2":"#ffffff");
+      map.setPaintProperty(layer.id,"line-opacity",1);
+    }catch(_){}
+  });
 }
 
 function ringArea(ring){
@@ -130,7 +154,9 @@ function buildTechzoneMask(rings){
 }
 
 function renderTechzones(){
-  if(!map||!map.isStyleLoaded())return;
+  if(!map)return;
+  const style=map.getStyle();
+  if(!style || !Array.isArray(style.layers))return;
   const dark=document.body.classList.contains("dark");
 
   if(map.getSource("jet-techzones")) map.getSource("jet-techzones").setData(techzoneGeoJSON);
@@ -142,12 +168,12 @@ function renderTechzones(){
 
     if(!map.getLayer("jet-outside-mask")) map.addLayer({
       id:"jet-outside-mask",type:"fill",source:"jet-outside-mask",
-      paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.16:.105}
+      paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.20:.105}
     });
     else {
       map.setLayoutProperty("jet-outside-mask","visibility","visible");
       map.setPaintProperty("jet-outside-mask","fill-color",dark?"#a91525":"#ef4055");
-      map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.16:.105);
+      map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.20:.105);
     }
   }else if(map.getLayer("jet-outside-mask")){
     map.setLayoutProperty("jet-outside-mask","visibility","none");
@@ -159,11 +185,19 @@ function renderTechzones(){
   });
   else map.setPaintProperty("jet-zone-fill","fill-opacity",0);
 
+  const zoneWidth=dark
+    ? ["interpolate",["linear"],["zoom"],9,1.8,14,2.8,18,3.5]
+    : ["interpolate",["linear"],["zoom"],9,1.4,14,2.35,18,2.9];
   if(!map.getLayer("jet-zone-line")) map.addLayer({
     id:"jet-zone-line",type:"line",source:"jet-techzones",
-    paint:{"line-color":dark?"#ff6170":"#df3348","line-width":["interpolate",["linear"],["zoom"],9,1.4,14,2.35,18,2.9],"line-opacity":.90}
+    paint:{"line-color":dark?"#ff5267":"#df3348","line-width":zoneWidth,"line-opacity":dark?.98:.90}
   });
-  else map.setPaintProperty("jet-zone-line","line-color",dark?"#ff6170":"#df3348");
+  else {
+    map.setLayoutProperty("jet-zone-line","visibility","visible");
+    map.setPaintProperty("jet-zone-line","line-color",dark?"#ff5267":"#df3348");
+    map.setPaintProperty("jet-zone-line","line-width",zoneWidth);
+    map.setPaintProperty("jet-zone-line","line-opacity",dark?.98:.90);
+  }
 }
 
 async function loadTechzones(){
@@ -201,6 +235,13 @@ async function loadTechzones(){
 function applyMapTheme(dark){
   if(!map)return;
   map.setStyle(baseMapStyle(dark),{diff:false});
+  // setStyle remove sources/layers customizados. Recoloca as Techzones assim que
+  // o novo estilo estiver pronto, evitando que as delimitações sumam no Dark Mode.
+  map.once("style.load",()=>{
+    tuneBaseMap(dark);
+    renderTechzones();
+    render();
+  });
 }
 
 function initMap(){
@@ -233,8 +274,18 @@ function initMap(){
   document.getElementById("map").appendChild(loc);
   document.getElementById("myLocation").onclick=()=>requestLocation(true);
 
-  map.on("load",()=>{render(); requestLocation(false); loadTechzones();});
-  map.on("style.load",()=>{renderTechzones(); render();});
+  map.on("load",()=>{
+    tuneBaseMap(document.body.classList.contains("dark"));
+    render();
+    requestLocation(false);
+    loadTechzones();
+  });
+  map.on("style.load",()=>{
+    const dark=document.body.classList.contains("dark");
+    tuneBaseMap(dark);
+    renderTechzones();
+    render();
+  });
   map.on("moveend",()=>render());
   map.on("zoomend",()=>render());
 }

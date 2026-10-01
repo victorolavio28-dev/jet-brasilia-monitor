@@ -64,19 +64,12 @@ const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
 let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
 let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, techzoneCount=0;
 
-// Mapa mais clean: CARTO Positron no modo claro e Dark Matter no modo escuro.
-// Ambos mantêm ruas, parques, água, hospitais e referências principais com menos poluição visual.
+// Base cartográfica vetorial com equilíbrio entre detalhe e limpeza visual.
+// OpenFreeMap não exige chave de API e mantém ruas, bairros, parques, água e referências urbanas.
 function baseMapStyle(dark=false){
-  const tiles=dark
-    ? ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png","https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"]
-    : ["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"];
-  return {
-    version:8,
-    sources:{
-      base:{type:"raster",tiles,tileSize:256,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank">CARTO</a>'}
-    },
-    layers:[{id:"base",type:"raster",source:"base",paint:{"raster-opacity":1}}]
-  };
+  return dark
+    ? "https://tiles.openfreemap.org/styles/dark"
+    : "https://tiles.openfreemap.org/styles/positron";
 }
 
 function ringArea(ring){
@@ -113,11 +106,11 @@ function renderTechzones(){
 
   if(!map.getLayer("jet-outside-mask")) map.addLayer({
     id:"jet-outside-mask",type:"fill",source:"jet-outside-mask",
-    paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.24:.17}
+    paint:{"fill-color":dark?"#a91525":"#ef4055","fill-opacity":dark?.20:.14}
   });
   else {
     map.setPaintProperty("jet-outside-mask","fill-color",dark?"#a91525":"#ef4055");
-    map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.24:.17);
+    map.setPaintProperty("jet-outside-mask","fill-opacity",dark?.20:.14);
   }
 
   if(!map.getLayer("jet-zone-fill")) map.addLayer({

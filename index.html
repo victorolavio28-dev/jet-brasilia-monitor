@@ -123,8 +123,14 @@ let searchSelection=null, searchBikeMarker=null, searchRevision=0;
 let scootersVisible=false, bikesRequest=null, scooterPopup=null, bikesUpdatedAt=0;
 const scooterSourceVersions=new WeakMap();
 let scooterData={type:"FeatureCollection",features:[]};
-let map, P=[], S=[], markers=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
+let map, P=[], S=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
 let parkingBikesSelection=null, parkingBikesRevision=0;
+let parkingPopup=null, parkingPopupId=null;
+let parkingData={type:"FeatureCollection",features:[]}, parkingDataSignature="";
+const parkingSourceVersions=new WeakMap();
+const parkingById=new Map();
+const parkingHitLayers=["jet-parking-points","jet-parking-counts","jet-parking-actions-compact","jet-parking-actions-detail"];
+
 let allowedGeometry=null, basePaints=new Map();
 let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, techzoneCount=0;
 
@@ -368,11 +374,15 @@ function initMap(){
     renderScooters();
     render();
   });
-  map.on("click","jet-scooter-points",showScooterPopup);
+  map.on("click",handleMapClick);
+  parkingHitLayers.forEach(id=>{
+    map.on("mouseenter",id,()=>{map.getCanvas().style.cursor="pointer"});
+    map.on("mouseleave",id,()=>{map.getCanvas().style.cursor=""});
+  });
   map.on("mouseenter","jet-scooter-points",()=>{map.getCanvas().style.cursor="pointer"});
   map.on("mouseleave","jet-scooter-points",()=>{map.getCanvas().style.cursor=""});
   map.on("zoomend",updateMapDetail);
-  // Os marcadores acompanham a câmera pelo MapLibre, sem recriação ao mover o mapa.
+  // As camadas acompanham a câmera sem reconstrução dos estacionamentos.
 
 }
 
@@ -410,14 +420,100 @@ function stat(x){
   return["OK","ok"]
 }
 
-function clearMarkers(){
-  markers.forEach(m=>m.remove());
-  markers=[];
+// Os estacionamentos são desenhados no canvas. Nenhum elemento DOM por ponto.
+function renderParkingLayers(points){
+  parkingById.clear();
+  const features=points.flatMap(x=>{
+    const lat=Number(x.latitude),lng=Number(x.longitude);
+    if(x.latitude==null||x.longitude==null||!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180)return [];
+    const id=String(x.id),[st,cl]=stat(x),action=parkingAction(x);
+    parkingById.set(id,x);
+    return [{type:"Feature",geometry:{type:"Point",coordinates:[lng,lat]},properties:{
+      id,count:String(+x.bikes_count||0),
+      color:!isMonitor(x)?"#1677ff":cl==="bad"?"#ff3b30":cl==="orange"?"#ff9500":cl==="warn"?"#ffc857":"#21d19a",
+      selected:searchSelection?.kind==="parking"&&String(searchSelection.id)===id,
+      compact:action.kind==="bring"?`↑${action.amount}`:action.kind==="take"?`↓${action.amount}`:"",
+      detail:action.kind==="bring"||action.kind==="take"?action.short:""
+    }}];
+  });
+  // Consultas dos patinetes não reenviam estacionamentos idênticos ao worker.
+  const signature=JSON.stringify(features);
+  if(signature!==parkingDataSignature){parkingData={type:"FeatureCollection",features};parkingDataSignature=signature;}
+  let source=map.getSource("jet-parkings");
+  if(!source){
+    map.addSource("jet-parkings",{type:"geojson",data:parkingData});
+    source=map.getSource("jet-parkings");parkingSourceVersions.set(source,parkingData);
+  }else if(parkingSourceVersions.get(source)!==parkingData){source.setData(parkingData);parkingSourceVersions.set(source,parkingData);}
+  if(!map.hasImage("jet-parking-badge")){
+    const canvas=document.createElement("canvas");canvas.width=48;canvas.height=28;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="#172033";ctx.strokeStyle="#ffffff";ctx.lineWidth=3;
+    ctx.beginPath();ctx.roundRect(2,2,44,24,10);ctx.fill();ctx.stroke();
+    map.addImage("jet-parking-badge",ctx.getImageData(0,0,48,28),{pixelRatio:2,stretchX:[[20,28]],stretchY:[[12,16]],content:[10,6,38,22]});
+  }
+  const add=layer=>{if(!map.getLayer(layer.id))map.addLayer(layer);};
+  add({id:"jet-parking-selection",type:"circle",source:"jet-parkings",filter:["==",["get","selected"],true],paint:{
+    "circle-radius":19,"circle-color":"#1677ff","circle-opacity":.2,"circle-stroke-width":3,"circle-stroke-color":"#1677ff",
+    "circle-pitch-alignment":"viewport","circle-pitch-scale":"viewport"}});
+  add({id:"jet-parking-points",type:"circle",source:"jet-parkings",paint:{
+    "circle-radius":11.5,"circle-color":["get","color"],"circle-stroke-width":2,"circle-stroke-color":"#ffffff",
+    "circle-pitch-alignment":"viewport","circle-pitch-scale":"viewport"}});
+  const textLayout={"text-font":["Noto Sans Bold"],"text-allow-overlap":true,"text-ignore-placement":true,
+    "text-pitch-alignment":"viewport","text-rotation-alignment":"viewport"};
+  add({id:"jet-parking-counts",type:"symbol",source:"jet-parkings",layout:{...textLayout,"text-field":["get","count"],"text-size":11},paint:{"text-color":"#07110e"}});
+  for(const detailed of [false,true]){
+    const key=detailed?"detail":"compact";
+    add({id:`jet-parking-actions-${detailed?"detail":"compact"}`,type:"symbol",source:"jet-parkings",
+      ...(detailed?{minzoom:14.5}:{maxzoom:14.5}),filter:["!=",["get",key],""],
+      layout:{...textLayout,"text-field":["get",key],"text-size":10,"text-offset":detailed?[0,2.4]:[1.5,-1.6],
+        "text-max-width":20,"icon-image":"jet-parking-badge","icon-text-fit":"both","icon-text-fit-padding":[2,4,2,4],
+        "icon-allow-overlap":true,"icon-ignore-placement":true,"icon-pitch-alignment":"viewport","icon-rotation-alignment":"viewport"},
+      paint:{"text-color":"#ffffff"}});
+  }
+  // Mantém estacionamentos e ações acima dos patinetes, inclusive após trocar o tema.
+  ["jet-parking-selection",...parkingHitLayers].forEach(id=>map.moveLayer(id));
+  if(parkingPopupId&&!parkingById.has(parkingPopupId)){parkingPopup?.remove();parkingPopup=null;parkingPopupId=null;}
+}
+function parkingAtPoint(point){
+  const layers=parkingHitLayers.filter(id=>map.getLayer(id));
+  return layers.length?map.queryRenderedFeatures(point,{layers})[0]:null;
+}
+function handleMapClick(e){
+  if(e.originalEvent?.target?.closest?.(".maplibregl-popup,.location-marker,.searched-scooter"))return;
+  const parking=parkingAtPoint(e.point);
+  if(parking){showParkingPopup(parking.properties.id);return;}
+  if(scootersVisible&&map.getLayer("jet-scooter-points")){
+    const features=map.queryRenderedFeatures(e.point,{layers:["jet-scooter-points"]});
+    if(features.length){parkingPopup?.remove();showScooterPopup({...e,features});}
+  }
+}
+function showParkingPopup(id){
+  const x=parkingById.get(String(id));if(!x)return;
+  if(scooterPopup){scooterPopup.remove();scooterPopup=null;}
+  parkingPopup?.remove();parkingPopupId=String(id);
+  const [st,cl]=stat(x),action=parkingAction(x),lat=Number(x.latitude),lng=Number(x.longitude);
+  const googleUrl=`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  const wazeUrl=`https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
+  const popup=new maplibregl.Popup({offset:16,maxWidth:"330px"}).setLngLat([lng,lat]).setHTML(
+    `<div class="popup parking-popup">
+      <div class="popup-title">${escapeHtml(x.name)}</div><div class="popup-action">${action.text}<small>${action.kind==="bring"||action.kind==="take"?"Necessidade total do ponto · até 2 por movimentação":"Confira a situação antes de movimentar"}</small></div>
+      <div class="popup-row">🛴 <b>${x.bikes_count||0}</b> patinetes &nbsp; • &nbsp; 🎯 Meta: <b>${x.target_bikes_count??"—"}</b></div>
+      <div class="popup-status ${cl}">${st}</div>
+      <div class="popup-update">Última atualização: ${escapeHtml(x.bc_updated_at||"—")}</div>
+      <button type="button" class="parking-bikes-btn">🛴 Ver patinetes deste estacionamento</button>
+      <div class="popup-nav">
+        <a class="nav-btn google" href="${googleUrl}" target="_blank" rel="noopener">🗺️ Google Maps</a>
+        <a class="nav-btn waze" href="${wazeUrl}" target="_blank" rel="noopener">🚗 Waze</a>
+      </div>
+    </div>`);
+  parkingPopup=popup;
+  popup.on("close",()=>{if(parkingPopup===popup){parkingPopup=null;parkingPopupId=null;}});
+  popup.addTo(map);
+  popup.getElement().querySelector(".parking-bikes-btn").onclick=e=>{e.stopPropagation();openParkingBikes(x);};
 }
 
 function render(){
   if(!map || !map.isStyleLoaded()) return;
-  clearMarkers();
 
   const f=document.getElementById("f").value,q=document.getElementById("q").value.toLowerCase();
 
@@ -438,54 +534,7 @@ function render(){
     const selected=P.find(x=>String(x.id)===String(searchSelection.id));
     if(selected&&!drawPoints.some(x=>String(x.id)===String(selected.id)))drawPoints.push(selected);
   }
-  drawPoints.forEach(x=>{
-    if(x.latitude==null)return;
-    let [st,cl]=stat(x);
-    const n=+x.bikes_count||0,t=+x.target_bikes_count||0;
-    const color=!isMonitor(x)?"#1677ff":cl==="bad"?"#ff3b30":cl==="orange"?"#ff9500":cl==="warn"?"#ffc857":"#21d19a";
-    const el=document.createElement("div");
-    el.className="jet-marker";
-    // O MapLibre recebe cliques no canvas; o estacionamento tem prioridade.
-    el.addEventListener("click",e=>{e.stopPropagation();if(scooterPopup){scooterPopup.remove();scooterPopup=null;}marker.togglePopup();});
-    if(searchSelection?.kind==="parking"&&String(x.id)===String(searchSelection.id))el.classList.add("search-selected");
-    el.style.background=color;
-    const action=parkingAction(x);
-    let movementBadge="";
-    if(action.kind==="bring"||action.kind==="take"){
-      const arrow=action.kind==="bring"?"↑":"↓";
-      movementBadge=`<span class="move-badge compact-label">${arrow}${action.amount}</span><span class="move-badge action-label">${action.short}</span>`;
-    }
-    el.innerHTML=`<span>${n}</span>${movementBadge}`;
-    el.setAttribute("role","button");el.setAttribute("tabindex","0");
-    el.setAttribute("aria-label",`${x.name}: ${n} patinetes. ${action.text}`);
-    el.title=`${x.name} · ${action.text}`;
-    const lat=Number(x.latitude), lng=Number(x.longitude);
-    const googleUrl=`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-    const wazeUrl=`https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
-    const popup=new maplibregl.Popup({offset:16,maxWidth:"330px"}).setHTML(
-      `<div class="popup parking-popup">
-        <div class="popup-title">${escapeHtml(x.name)}</div><div class="popup-action">${action.text}<small>${action.kind==="bring"||action.kind==="take"?"Necessidade total do ponto · até 2 por movimentação":"Confira a situação antes de movimentar"}</small></div>
-        <div class="popup-row">🛴 <b>${x.bikes_count||0}</b> patinetes &nbsp; • &nbsp; 🎯 Meta: <b>${x.target_bikes_count??"—"}</b></div>
-        <div class="popup-status ${cl}">${st}</div>
-        <div class="popup-update">Última atualização: ${x.bc_updated_at||"—"}</div>
-        <button type="button" class="parking-bikes-btn">🛴 Ver patinetes deste estacionamento</button>
-        <div class="popup-nav">
-          <a class="nav-btn google" href="${googleUrl}" target="_blank" rel="noopener">🗺️ Google Maps</a>
-          <a class="nav-btn waze" href="${wazeUrl}" target="_blank" rel="noopener">🚗 Waze</a>
-        </div>
-      </div>`
-    );
-    popup.on("open",()=>{
-      const button=popup.getElement().querySelector(".parking-bikes-btn");
-      button.onclick=e=>{e.stopPropagation();openParkingBikes(x);};
-    });
-    const marker=new maplibregl.Marker({element:el,anchor:"center",rotationAlignment:"viewport",pitchAlignment:"viewport",subpixelPositioning:true})
-      .setLngLat([x.longitude,x.latitude]).setPopup(popup).addTo(map);
-    el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopImmediatePropagation();marker.togglePopup();}},true);
-    marker.__parkingId=x.id;
-    markers.push(marker);
-    if(searchSelection?.kind==="parking"&&String(x.id)===String(searchSelection.id))marker.openPopup();
-  });
+  renderParkingLayers(drawPoints);
 
   let a=P.filter(x=>isMonitor(x)&&((+x.bikes_count||0)==0||((+x.target_bikes_count||0)>0&&(+x.bikes_count||0)<(+x.target_bikes_count||0))))
     .sort((a,b)=>(+a.bikes_count||0)-(+b.bikes_count||0)).slice(0,100);
@@ -566,6 +615,8 @@ function renderScooters(){
       "circle-stroke-color":document.body.classList.contains("dark")?"#dcecff":"#ffffff"}
   });
   else map.setLayoutProperty("jet-scooter-points","visibility",scootersVisible?"visible":"none");
+  // Patinetes ficam abaixo dos estacionamentos mesmo se forem carregados depois.
+  if(map.getLayer("jet-parking-selection"))map.moveLayer("jet-scooter-points","jet-parking-selection");
 }
 function updateScooterButton(){
   const btn=document.getElementById("scooterBtn");if(!btn)return;
@@ -726,6 +777,7 @@ const normalizeSearch=value=>String(value||"").toLowerCase().normalize("NFD").re
 let searchHits=[];
 function clearSearchSelection(){
   searchSelection=null;
+  parkingPopup?.remove();
   if(searchBikeMarker){searchBikeMarker.remove();searchBikeMarker=null;}
   if(scooterPopup){scooterPopup.remove();scooterPopup=null;}
   render();
@@ -774,7 +826,7 @@ function selectSearchHit(hit){
   const revision=searchRevision;
   const open=()=>{
     if(revision!==searchRevision||searchSelection?.id!==hit.id)return;
-    if(hit.kind==="parking")markers.find(m=>String(m.__parkingId)===hit.id)?.openPopup();
+    if(hit.kind==="parking")showParkingPopup(hit.id);
     else showScooterPopup({features:[hit.item]},true);
   };
   // Abre imediatamente e novamente após o movimento para manter o foco no resultado.

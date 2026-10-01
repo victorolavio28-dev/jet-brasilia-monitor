@@ -420,6 +420,36 @@ function stat(x){
   return["OK","ok"]
 }
 
+// Textos rasterizados uma única vez com a mesma fonte e medidas dos marcadores originais.
+// As imagens são reutilizadas pelas camadas, preservando o ganho de FPS.
+const parkingVisualCache=new Map();
+function parkingVisual(kind,text){
+  if(!text)return "";
+  const small=typeof innerWidth==="number"&&innerWidth<=650;
+  const size=kind==="count"?11:kind==="detail"&&small?9:10;
+  const id=`jet-parking-${kind}-${size}-${encodeURIComponent(text)}`;
+  if(!map.hasImage(id)){
+    let data=parkingVisualCache.get(id);
+    if(!data){
+      const canvas=document.createElement("canvas"),ctx=canvas.getContext("2d");
+      ctx.font=`900 ${size}px system-ui, sans-serif`;
+      const width=kind==="count"?27:Math.max(22,Math.ceil(ctx.measureText(text).width)+(kind==="detail"?14:12));
+      const height=kind==="count"?27:18;
+      canvas.width=width*2;canvas.height=height*2;ctx.scale(2,2);
+      if(kind!=="count"){
+        ctx.fillStyle="#172033";ctx.strokeStyle="#fff";ctx.lineWidth=2;
+        ctx.beginPath();ctx.roundRect(1,1,width-2,height-2,9);ctx.fill();ctx.stroke();
+      }
+      ctx.font=`900 ${size}px system-ui, sans-serif`;
+      ctx.fillStyle=kind==="count"?"#07110e":"#fff";
+      ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(text,width/2,height/2+.5);
+      data=ctx.getImageData(0,0,canvas.width,canvas.height);parkingVisualCache.set(id,data);
+    }
+    map.addImage(id,data,{pixelRatio:2});
+  }
+  return id;
+}
+
 // Os estacionamentos são desenhados no canvas. Nenhum elemento DOM por ponto.
 function renderParkingLayers(points){
   parkingById.clear();
@@ -429,11 +459,13 @@ function renderParkingLayers(points){
     const id=String(x.id),[st,cl]=stat(x),action=parkingAction(x);
     parkingById.set(id,x);
     return [{type:"Feature",geometry:{type:"Point",coordinates:[lng,lat]},properties:{
-      id,count:String(+x.bikes_count||0),
+      id,count:String(+x.bikes_count||0),countIcon:parkingVisual("count",String(+x.bikes_count||0)),
       color:!isMonitor(x)?"#1677ff":cl==="bad"?"#ff3b30":cl==="orange"?"#ff9500":cl==="warn"?"#ffc857":"#21d19a",
       selected:searchSelection?.kind==="parking"&&String(searchSelection.id)===id,
       compact:action.kind==="bring"?`↑${action.amount}`:action.kind==="take"?`↓${action.amount}`:"",
-      detail:action.kind==="bring"||action.kind==="take"?action.short:""
+      detail:action.kind==="bring"||action.kind==="take"?action.short:"",
+      compactIcon:parkingVisual("compact",action.kind==="bring"?`↑${action.amount}`:action.kind==="take"?`↓${action.amount}`:""),
+      detailIcon:parkingVisual("detail",action.kind==="bring"||action.kind==="take"?action.short:"")
     }}];
   });
   // Consultas dos patinetes não reenviam estacionamentos idênticos ao worker.
@@ -444,31 +476,24 @@ function renderParkingLayers(points){
     map.addSource("jet-parkings",{type:"geojson",data:parkingData});
     source=map.getSource("jet-parkings");parkingSourceVersions.set(source,parkingData);
   }else if(parkingSourceVersions.get(source)!==parkingData){source.setData(parkingData);parkingSourceVersions.set(source,parkingData);}
-  if(!map.hasImage("jet-parking-badge")){
-    const canvas=document.createElement("canvas");canvas.width=48;canvas.height=28;
-    const ctx=canvas.getContext("2d");
-    ctx.fillStyle="#172033";ctx.strokeStyle="#ffffff";ctx.lineWidth=3;
-    ctx.beginPath();ctx.roundRect(2,2,44,24,10);ctx.fill();ctx.stroke();
-    map.addImage("jet-parking-badge",ctx.getImageData(0,0,48,28),{pixelRatio:2,stretchX:[[20,28]],stretchY:[[12,16]],content:[10,6,38,22]});
-  }
   const add=layer=>{if(!map.getLayer(layer.id))map.addLayer(layer);};
   add({id:"jet-parking-selection",type:"circle",source:"jet-parkings",filter:["==",["get","selected"],true],paint:{
     "circle-radius":19,"circle-color":"#1677ff","circle-opacity":.2,"circle-stroke-width":3,"circle-stroke-color":"#1677ff",
     "circle-pitch-alignment":"viewport","circle-pitch-scale":"viewport"}});
   add({id:"jet-parking-points",type:"circle",source:"jet-parkings",paint:{
-    "circle-radius":11.5,"circle-color":["get","color"],"circle-stroke-width":2,"circle-stroke-color":"#ffffff",
+    "circle-radius":typeof innerWidth==="number"&&innerWidth<=800?10.5:11.5,"circle-color":["get","color"],"circle-stroke-width":2,"circle-stroke-color":"#ffffff",
     "circle-pitch-alignment":"viewport","circle-pitch-scale":"viewport"}});
-  const textLayout={"text-font":["Noto Sans Bold"],"text-allow-overlap":true,"text-ignore-placement":true,
-    "text-pitch-alignment":"viewport","text-rotation-alignment":"viewport"};
-  add({id:"jet-parking-counts",type:"symbol",source:"jet-parkings",layout:{...textLayout,"text-field":["get","count"],"text-size":11},paint:{"text-color":"#07110e"}});
+  const iconLayout={"icon-allow-overlap":true,"icon-ignore-placement":true,
+    "icon-pitch-alignment":"viewport","icon-rotation-alignment":"viewport"};
+  add({id:"jet-parking-counts",type:"symbol",source:"jet-parkings",layout:{...iconLayout,"icon-image":["get","countIcon"]}});
+  const mobile=typeof innerWidth==="number"&&innerWidth<=800;
   for(const detailed of [false,true]){
     const key=detailed?"detail":"compact";
     add({id:`jet-parking-actions-${detailed?"detail":"compact"}`,type:"symbol",source:"jet-parkings",
       ...(detailed?{minzoom:14.5}:{maxzoom:14.5}),filter:["!=",["get",key],""],
-      layout:{...textLayout,"text-field":["get",key],"text-size":10,"text-offset":detailed?[0,2.4]:[1.5,-1.6],
-        "text-max-width":20,"icon-image":"jet-parking-badge","icon-text-fit":"both","icon-text-fit-padding":[2,4,2,4],
-        "icon-allow-overlap":true,"icon-ignore-placement":true,"icon-pitch-alignment":"viewport","icon-rotation-alignment":"viewport"},
-      paint:{"text-color":"#ffffff"}});
+      layout:{...iconLayout,"icon-image":["get",key+"Icon"],
+        "icon-anchor":detailed?"top":"top-right",
+        "icon-offset":detailed?[0,mobile?15.5:14.5]:[mobile?28.5:29.5,mobile?-24.5:-25.5]}});
   }
   // Mantém estacionamentos e ações acima dos patinetes, inclusive após trocar o tema.
   ["jet-parking-selection",...parkingHitLayers].forEach(id=>map.moveLayer(id));

@@ -1,6 +1,5 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>JET Brasília Monitor</title><meta name="theme-color" content="#121624"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="JET Monitor"><link rel="manifest" href="manifest.json"><link href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" rel="stylesheet"><style>
 body{margin:0;background:#090b12;color:#f4f6fb;font:14px system-ui}header{padding:16px;background:#121624;position:sticky;top:0;z-index:9}h1{margin:0;font-size:20px}.sub{color:#9aa3ba;font-size:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}button,input,select{background:#181d2d;color:#fff;border:1px solid #30374e;border-radius:9px;padding:8px}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px}.card{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:12px}.label{color:#9aa3ba;font-size:10px}.value{font-size:23px;font-weight:800}main{padding:0 10px}#map{height:60vh;border-radius:13px;overflow:hidden}.tables{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.box{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:10px;overflow:auto;max-height:420px}table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px;border-bottom:1px solid #252b3e;text-align:left}th{color:#9aa3ba}.ok{color:#18b77a}.warn{color:#c98b00}.orange{color:#ff9500}.bad{color:#ff3b30}@media(max-width:800px){.cards{grid-template-columns:repeat(2,1fr)}.tables{grid-template-columns:1fr}#map{height:58vh}}
-<style>
 #map{position:relative;background:#eef1f3;touch-action:none}
 .maplibregl-canvas{outline:none}
 .maplibregl-ctrl-group{border:1px solid #d7dce2!important;border-radius:11px!important;overflow:hidden;box-shadow:0 4px 16px rgba(20,25,35,.16)!important}
@@ -55,12 +54,26 @@ body.dark{--bg:#080d14;--panel:#111923;--text:#eef3f8;--muted:#9ba9ba;--line:#25
 @media(min-width:651px){.map-topbar{grid-template-columns:minmax(280px,1fr) auto;align-items:start}.map-actions{display:flex;width:auto;gap:8px}.map-actions .filter-wrap{width:auto}.map-actions button{width:auto}.map-topbar input{max-width:520px}}
 @media(max-width:650px){.cards{grid-template-columns:repeat(2,1fr)}.tables{grid-template-columns:1fr}.filter-menu{min-width:0}.map-actions{grid-template-columns:1.2fr 1fr 1fr}}
 @media(max-width:380px){.map-actions{gap:5px}.map-actions button{font-size:12px;padding:0 5px}}
-</style>
+
+/* Orientação operacional: ações curtas, legenda e lista por prioridade. */
+button:focus-visible,a:focus-visible,.jet-marker:focus-visible{outline:3px solid #1677ff;outline-offset:3px}
+.map-topbar .scooter-toggle{grid-column:auto}.map-topbar .where-toggle{grid-column:span 2;font-weight:800;background:#172e48;color:#fff}
+.operations-strip{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:3px 10px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:12px;box-shadow:0 2px 8px #0001}
+.operations-strip strong{font-size:12px}.operations-strip small{font-size:10px;color:var(--muted)}.operations-strip small.fetch-error{color:#d92d20;font-weight:800}
+.map-legend{position:absolute;bottom:calc(34px + env(safe-area-inset-bottom));left:9px;z-index:6;max-width:210px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;box-shadow:0 2px 12px #0002;font-size:11px;padding:8px 10px}.map-legend summary{font-weight:800;cursor:pointer;min-height:22px}.legend-grid{display:grid;gap:4px;padding-top:4px}.legend-grid span{display:flex;align-items:center;gap:6px}.legend-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}.legend-grid small{color:var(--muted);max-width:170px}
+.move-badge{top:-12px;right:-16px;min-width:22px}.move-badge.action-label{display:none;font-size:9px;padding:0 5px;white-space:nowrap;right:auto;left:50%;transform:translateX(-50%);top:28px;height:18px;line-height:14px;background:#172033}.map-detail .move-badge.action-label{display:block}.map-detail .move-badge.compact-label{display:none}
+.popup-action{padding:10px;border-radius:9px;background:#e8f1ff;color:#143d6b;margin:8px 0;font-size:16px;font-weight:900}.popup-action small{display:block;font-size:11px;font-weight:500;margin-top:3px}.jet-marker.selected-point{outline:3px solid #172e48;outline-offset:3px}
+.work-panel{position:absolute;left:9px;right:64px;bottom:calc(34px + env(safe-area-inset-bottom));z-index:15;max-width:430px;max-height:43dvh;overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 28px #0003;padding:12px}.work-panel[hidden]{display:none}.work-panel header{display:flex!important;align-items:center;justify-content:space-between;background:transparent;padding:0;gap:8px}.work-panel h2{font-size:17px;margin:0}.work-panel .close-work{width:38px;height:38px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--text);font-size:20px}.work-note{font-size:11px;color:var(--muted);margin:5px 0 10px}.work-list{display:grid;gap:7px}.work-item{display:flex;align-items:center;gap:9px;text-align:left;width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);min-height:55px;cursor:pointer}.work-item .rank{width:24px;height:24px;border-radius:50%;background:#eef2f6;color:#172033;display:grid;place-items:center;font-size:12px;font-weight:800;flex-shrink:0}.work-item .work-copy{min-width:0;flex:1}.work-item strong,.work-item small{display:block}.work-item strong{font-size:12px;white-space:normal}.work-item small{font-size:10px;color:var(--muted);margin-top:4px}.work-item .work-action{font-size:12px;font-weight:900;white-space:nowrap}.work-empty{font-size:13px;padding:14px 0}.work-panel .work-item:focus-visible{outline-offset:-3px}
+body.dark .popup-action{background:#173658;color:#dcecff}body.dark .map-topbar .where-toggle{background:#255387;color:#fff}body.dark .operations-strip small.fetch-error{color:#ff9a9a}
+@media(min-width:651px){.map-actions{flex-wrap:wrap;max-width:540px;justify-content:flex-end}.map-actions .operations-strip{flex-basis:100%}.map-legend{max-width:230px}.move-badge.action-label{font-size:10px}}
 </style></head><body>
 <header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 60s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option></select><input id="q" placeholder="Buscar ponto"></div></header>
-<main><div id="map"></div><div class="map-topbar"><div class="search-box"><input id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Buscar estacionamento..."><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">⚙️ Filtros</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar patinetes</button></div></div><section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Meta</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 30%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
+<main><div id="map"></div><div class="map-topbar"><div class="search-box"><input id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Buscar estacionamento..."><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">⚙️ Filtros</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar patinetes</button><button id="whereBtn" class="where-toggle" aria-expanded="false" aria-controls="workPanel">◎ Onde atuar?</button><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small></div></div></div>
+<details class="map-legend" open><summary>Como ler o mapa</summary><div class="legend-grid"><span><i class="legend-dot" style="background:#ff3b30"></i>Vazio · abastecer primeiro</span><span><i class="legend-dot" style="background:#ff9500"></i>1 patinete · prioridade</span><span><i class="legend-dot" style="background:#ffc857"></i>Abaixo da meta · levar</span><span><i class="legend-dot" style="background:#21d19a"></i>Meta atingida · verificar excesso</span><span><i class="legend-dot" style="background:#1677ff"></i>Fora do monitor</span><small>Número no círculo = quantidade atual.<br>↑ levar · ↓ retirar. Aproxime para ler a ação.</small></div></details>
+<section id="workPanel" class="work-panel" hidden aria-labelledby="workTitle"><header><h2 id="workTitle">Onde atuar?</h2><button id="closeWork" class="close-work" aria-label="Fechar lista de prioridades">×</button></header><p class="work-note" id="workNote">Pontos do filtro atual, por prioridade. Toque para localizar.</p><div id="workList" class="work-list"></div></section><section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Meta</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 30%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
 <script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><script>
+let parkingsUpdatedAt=0, parkingFetchFailed=false, selectedParkingId=null, currentVisibleParkings=[], userCoords=null;
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
 let scootersVisible=false, bikesRequest=null, scooterPopup=null, bikesUpdatedAt=0;
 const scooterSourceVersions=new WeakMap();
@@ -303,6 +316,7 @@ function initMap(){
   });
   map.on("style.load",()=>{
     const dark=document.body.classList.contains("dark");
+    updateMapDetail();
     tuneBaseMap(dark);
     renderTechzones();
     renderScooters();
@@ -311,6 +325,7 @@ function initMap(){
   map.on("click","jet-scooter-points",showScooterPopup);
   map.on("mouseenter","jet-scooter-points",()=>{map.getCanvas().style.cursor="pointer"});
   map.on("mouseleave","jet-scooter-points",()=>{map.getCanvas().style.cursor=""});
+  map.on("zoomend",updateMapDetail);
   // Os marcadores acompanham a câmera pelo MapLibre, sem recriação ao mover o mapa.
 
 }
@@ -371,6 +386,7 @@ function render(){
     if(x.latitude==null||x.longitude==null)return false;
     return true;
   });
+  currentVisibleParkings=visible;updateOperationalUI(visible);updateMapDetail();
   visible.forEach(x=>{
     if(x.latitude==null)return;
     let [st,cl]=stat(x);
@@ -379,18 +395,23 @@ function render(){
     const el=document.createElement("div");
     el.className="jet-marker";
     el.style.background=color;
+    const action=parkingAction(x);
     let movementBadge="";
-    if(isMonitor(x) && t>0){
-      if(n<t) movementBadge=`<span class="move-badge">+${t-n}</span>`;
-      else if(n>t) movementBadge=`<span class="move-badge">−${n-t}</span>`;
+    if(action.kind==="bring"||action.kind==="take"){
+      const arrow=action.kind==="bring"?"↑":"↓";
+      movementBadge=`<span class="move-badge compact-label">${arrow}${action.amount}</span><span class="move-badge action-label">${action.short}</span>`;
     }
     el.innerHTML=`<span>${n}</span>${movementBadge}`;
+    el.setAttribute("role","button");el.setAttribute("tabindex","0");
+    el.setAttribute("aria-label",`${x.name}: ${n} patinetes. ${action.text}`);
+    el.title=`${x.name} · ${action.text}`;
+    if(String(x.id)===String(selectedParkingId))el.classList.add("selected-point");
     const lat=Number(x.latitude), lng=Number(x.longitude);
     const googleUrl=`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
     const wazeUrl=`https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
     const popup=new maplibregl.Popup({offset:16,maxWidth:"330px"}).setHTML(
       `<div class="popup parking-popup">
-        <div class="popup-title">${x.name}</div>
+        <div class="popup-title">${escapeHtml(x.name)}</div><div class="popup-action">${action.text}<small>${action.kind==="bring"||action.kind==="take"?"Necessidade total do ponto · até 2 por movimentação":"Confira a situação antes de movimentar"}</small></div>
         <div class="popup-row">🛴 <b>${x.bikes_count||0}</b> patinetes &nbsp; • &nbsp; 🎯 Meta: <b>${x.target_bikes_count??"—"}</b></div>
         <div class="popup-status ${cl}">${st}</div>
         <div class="popup-update">Última atualização: ${x.bc_updated_at||"—"}</div>
@@ -404,6 +425,7 @@ function render(){
     );
     const marker=new maplibregl.Marker({element:el,anchor:"center",rotationAlignment:"viewport",pitchAlignment:"viewport",subpixelPositioning:true})
       .setLngLat([x.longitude,x.latitude]).setPopup(popup).addTo(map);
+    el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();marker.togglePopup();}});
     marker.__parkingId=x.id;
     markers.push(marker);
   });
@@ -423,6 +445,7 @@ function render(){
 }
 function updateUserLocation(pos,center=false){
   const {latitude,longitude,accuracy}=pos.coords;
+  userCoords=[longitude,latitude];if(currentVisibleParkings.length)updateOperationalUI(currentVisibleParkings);
   const el=userMarker?userMarker.getElement():document.createElement("div");
   if(!userMarker){
     el.className="location-marker";
@@ -448,17 +471,14 @@ function requestLocation(center){
 }
 
 async function load(){try{
-  // O modo operacional padrão é Monitor.
-  document.getElementById("f").value="monitor";
-  if(typeof filterMenu!=="undefined") filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter==="monitor"));
-  if(typeof filterBtn!=="undefined") filterBtn.textContent="🟡 Monitor";
-  P=await all("parkings");
+  P=await all("parkings");parkingsUpdatedAt=Date.now();parkingFetchFailed=false;
+  updateFreshness();
   document.getElementById("p").textContent=P.length.toLocaleString("pt-BR");
   document.getElementById("z").textContent=P.filter(x=>(+x.bikes_count||0)==0).length.toLocaleString("pt-BR");
   document.getElementById("m").textContent=P.filter(x=>isMonitor(x)).length.toLocaleString("pt-BR");
   render();
   document.getElementById("s").textContent="Mapa carregado — dados de patinetes serão consultados quando necessários.";
-}catch(e){document.getElementById("s").textContent="Erro ao consultar a API: "+e.message}}
+}catch(e){parkingFetchFailed=true;updateFreshness();document.getElementById("s").textContent="Erro ao consultar a API: "+e.message}}
 
 function bikeFeatures(bikes){
   return {type:"FeatureCollection",features:bikes.flatMap(x=>{
@@ -527,10 +547,72 @@ async function loadBikes(force=false){
   try{return await bikesRequest;}finally{bikesRequest=null;}
 }
 
+function escapeHtml(value){return String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function parkingAction(x){
+  const n=Math.max(0,Number(x.bikes_count)||0),t=Number(x.target_bikes_count)||0;
+  if(!isMonitor(x))return{kind:"off",amount:0,text:"Fora do monitor",short:"Fora do monitor",rank:5};
+  if(t>0&&n<t)return{kind:"bring",amount:t-n,text:`Levar ${t-n} patinete${t-n===1?"":"s"}`,short:`Levar ${t-n}`,rank:n===0?0:n===1?1:2};
+  if(t>0&&n>t)return{kind:"take",amount:n-t,text:`Retirar ${n-t} patinete${n-t===1?"":"s"}`,short:`Retirar ${n-t}`,rank:3};
+  if(t<=0)return{kind:"unknown",amount:0,text:n===0?"Ponto vazio · conferir meta":"Conferir meta do ponto",short:"Conferir meta",rank:n===0?0:n===1?1:4};
+  return{kind:"ok",amount:0,text:"Meta atingida",short:"Meta atingida",rank:4};
+}
+function parkingDistance(x){
+  if(!userCoords)return null;
+  const rad=v=>v*Math.PI/180,lat1=rad(userCoords[1]),lat2=rad(Number(x.latitude));
+  const a=Math.sin((lat2-lat1)/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(rad(Number(x.longitude)-userCoords[0])/2)**2;
+  return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(Math.max(0,1-a)));
+}
+function operationalTasks(points){
+  return points.filter(isMonitor).map(x=>({x,action:parkingAction(x),distance:parkingDistance(x)}))
+    .filter(({x,action})=>action.kind==="bring"||action.kind==="take"||(action.kind==="unknown"&&Number(x.bikes_count)<=1))
+    .sort((a,b)=>a.action.rank-b.action.rank||(a.distance??Infinity)-(b.distance??Infinity)||b.action.amount-a.action.amount||String(a.x.name).localeCompare(String(b.x.name)));
+}
+function updateMapDetail(){if(map)document.getElementById("map").classList.toggle("map-detail",map.getZoom()>=14.5);}
+function updateFreshness(){
+  const el=document.getElementById("freshness");if(!el)return;
+  const time=parkingsUpdatedAt?new Date(parkingsUpdatedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"}):null;
+  el.classList.toggle("fetch-error",parkingFetchFailed);
+  el.textContent=parkingFetchFailed?(time?`Falha na consulta · último sucesso ${time}`:"Falha na consulta · tente atualizar"):(time?`Consultado às ${time}`:"Aguardando consulta");
+  el.title="Horário da consulta dos estacionamentos. Cada ponto informa sua própria atualização.";
+}
+function updateOperationalUI(points){
+  const monitored=points.filter(isMonitor),empty=monitored.filter(x=>(Number(x.bikes_count)||0)===0).length;
+  const missing=monitored.reduce((sum,x)=>sum+(parkingAction(x).kind==="bring"?parkingAction(x).amount:0),0);
+  const el=document.getElementById("opSummary");if(el)el.textContent=`${empty} ponto${empty===1?"":"s"} vazio${empty===1?"":"s"} · ${missing} patinete${missing===1?"":"s"} faltando`;
+  const list=document.getElementById("workList");if(!list)return;list.replaceChildren();
+  const tasks=operationalTasks(points);
+  const note=document.getElementById("workNote");if(note)note.textContent=userCoords?"Prioridade primeiro; distância em linha reta para desempatar. Toque para localizar.":"Pontos do filtro atual, por prioridade. Toque para localizar.";
+  if(!tasks.length){const msg=document.createElement("p");msg.className="work-empty";msg.textContent=parkingsUpdatedAt?"Nenhuma ação pendente neste filtro.":"Aguardando os estacionamentos…";list.appendChild(msg);return;}
+  tasks.slice(0,100).forEach(({x,action,distance},i)=>{
+    const button=document.createElement("button");button.className="work-item";
+    const rank=document.createElement("span");rank.className="rank";rank.textContent=i+1;
+    const copy=document.createElement("span");copy.className="work-copy";
+    const name=document.createElement("strong");name.textContent=x.name||"Estacionamento";
+    const meta=document.createElement("small");meta.textContent=`${Number(x.bikes_count)||0} no ponto · meta ${Number(x.target_bikes_count)>0?x.target_bikes_count:"não definida"}${distance==null?"":` · ${distance<1?Math.round(distance*1000)+" m":distance.toFixed(1)+" km"}`}`;
+    copy.append(name,meta);const label=document.createElement("span");label.className="work-action";label.textContent=action.short;
+    button.append(rank,copy,label);button.setAttribute("aria-label",`${x.name}. ${action.text}. Localizar no mapa`);
+    button.onclick=()=>focusParking(x);list.appendChild(button);
+  });
+}
+function setWorkPanel(open){
+  document.getElementById("workPanel").hidden=!open;
+  document.getElementById("whereBtn").setAttribute("aria-expanded",String(open));
+  if(open)updateOperationalUI(currentVisibleParkings);
+}
+function focusParking(x){
+  selectedParkingId=x.id;setWorkPanel(false);
+  markers.forEach(m=>{const el=m.getElement();el.classList.toggle("selected-point",String(m.__parkingId)===String(x.id));});
+  const open=()=>{const marker=markers.find(m=>String(m.__parkingId)===String(x.id));if(marker)marker.openPopup();};
+  map.once("moveend",open);map.flyTo({center:[Number(x.longitude),Number(x.latitude)],zoom:Math.max(map.getZoom(),16),padding:{top:190,bottom:90,left:40,right:40},duration:650});
+}
+
 initMap();
 document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Filtros":v==="monitor"?"🟡 Monitor":"🔴 Monitor zerados";render();};document.getElementById("q").oninput=render;load().then(()=>loadBikes());setInterval(()=>{load();if(scootersVisible)loadBikes(true)},60000);setInterval(loadTechzones,600000);
 </script>
 <script>
+document.getElementById("whereBtn").onclick=()=>setWorkPanel(document.getElementById("workPanel").hidden);
+document.getElementById("closeWork").onclick=()=>{setWorkPanel(false);document.getElementById("whereBtn").focus();};
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!document.getElementById("workPanel").hidden){setWorkPanel(false);document.getElementById("whereBtn").focus();}});
 const scooterBtn=document.getElementById("scooterBtn");
 scooterBtn.onclick=async()=>{
   scootersVisible=!scootersVisible;updateScooterButton();renderScooters();

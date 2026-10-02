@@ -1,4 +1,14 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>JET Brasília Monitor</title><meta name="theme-color" content="#121624"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="JET Monitor"><link rel="manifest" href="manifest.json"><link href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" rel="stylesheet"><style>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>JET Brasília Monitor</title><link rel="preconnect" href="https://logistic.gojet.app"><link rel="preconnect" href="https://tiles.openfreemap.org"><script>
+const jetBootstrapPages=new Map();
+let resolveJetTurf;const jetTurfReady=new Promise(resolve=>{resolveJetTurf=resolve;});
+for(const kind of ["parkings","bikes"]){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+  const promise=fetch(`https://logistic.gojet.app/api/v0/urent/${kind}?city_id=6787b812c168def1b2c6d143&page=1&limit=1000`,{cache:"no-store",signal:controller.signal})
+    .then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();})
+    .catch(()=>null).finally(()=>clearTimeout(timer));
+  jetBootstrapPages.set(kind,promise);
+}
+</script><meta name="theme-color" content="#121624"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="JET Monitor"><link rel="manifest" href="manifest.json"><link href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" rel="stylesheet"><style>
 body{margin:0;background:#090b12;color:#f4f6fb;font:14px system-ui}header{padding:16px;background:#121624;position:sticky;top:0;z-index:9}h1{margin:0;font-size:20px}.sub{color:#9aa3ba;font-size:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}button,input,select{background:#181d2d;color:#fff;border:1px solid #30374e;border-radius:9px;padding:8px}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px}.card{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:12px}.label{color:#9aa3ba;font-size:10px}.value{font-size:23px;font-weight:800}main{padding:0 10px}#map{height:60vh;border-radius:13px;overflow:hidden}.tables{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.box{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:10px;overflow:auto;max-height:420px}table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px;border-bottom:1px solid #252b3e;text-align:left}th{color:#9aa3ba}.ok{color:#18b77a}.warn{color:#c98b00}.orange{color:#ff9500}.bad{color:#ff3b30}@media(max-width:800px){.cards{grid-template-columns:repeat(2,1fr)}.tables{grid-template-columns:1fr}#map{height:58vh}}
 #map{position:relative;background:#eef1f3;touch-action:none}
 .maplibregl-canvas{outline:none}
@@ -137,8 +147,8 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 <div class="parking-bikes-header"><div><h2 id="parkingBikesTitle">Patinetes do estacionamento</h2><p id="parkingBikesName"></p></div><button type="button" id="parkingBikesClose" class="parking-bikes-close" aria-label="Fechar lista">×</button></div>
 <div id="parkingBikesContent" class="parking-bikes-content" aria-live="polite"></div></dialog>
 <script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><script>
-let parkingsUpdatedAt=0, parkingFetchFailed=false, currentVisibleParkings=[];
+<script defer src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js" onload="resolveJetTurf(true)" onerror="resolveJetTurf(false)"></script><script>
+let parkingsUpdatedAt=0, parkingFetchFailed=false, parkingUsingCache=false, currentVisibleParkings=[];
 const PARKING_REFRESH_MS=15000, BIKE_REFRESH_MS=60000;
 let parkingRequest=null, parkingRefreshTimer=null, parkingRetryMs=PARKING_REFRESH_MS;
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
@@ -146,6 +156,7 @@ let searchSelection=null, searchBikeMarker=null, searchRevision=0;
 let scootersVisible=false, bikesRequest=null, scooterPopup=null, bikesUpdatedAt=0;
 const scooterSourceVersions=new WeakMap();
 let scooterData={type:"FeatureCollection",features:[]};
+let mapStyleReady=false;
 let map, P=[], S=[], bikesLoaded=false, userMarker=null, userWatchId=null, firstUserFix=true;
 let parkingBikesSelection=null, parkingBikesRevision=0;
 let parkingPopup=null, parkingPopupId=null;
@@ -160,46 +171,45 @@ let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, t
 // Base cartográfica vetorial com equilíbrio entre detalhe e limpeza visual.
 // No modo claro usamos Liberty para preservar parques verdes e água azul.
 // Depois do carregamento, as vias são clareadas para recuperar o visual de ruas brancas.
-function baseMapStyle(dark=false){
-  return dark
-    ? "https://tiles.openfreemap.org/styles/dark"
-    : "https://tiles.openfreemap.org/styles/liberty";
+function baseMapStyle(){
+  // Um único estilo mantém as fontes, camadas, filtros e câmera nos dois temas.
+  return "https://tiles.openfreemap.org/styles/liberty";
 }
-
 function tuneBaseMap(dark=false){
   if(!map)return;
-  const style=map.getStyle();
-  if(!style || !Array.isArray(style.layers))return;
-
-  // Mantém as cores naturais do Liberty (parques/vegetação verdes e água azul),
-  // mas neutraliza o amarelo/laranja das vias para um mapa mais clean.
-  style.layers.forEach(layer=>{
+  const style=map.getStyle();if(!style||!Array.isArray(style.layers))return;
+  for(const layer of style.layers){
+    if(layer.id.startsWith("jet-"))continue;
+    if(!basePaints.has(layer.id))basePaints.set(layer.id,{paint:{...layer.paint},filter:layer.filter});
+    const original=basePaints.get(layer.id),paint=original.paint;
+    const id=String(layer.id).toLowerCase(),source=String(layer["source-layer"]||"").toLowerCase();
+    const water=/water|ocean|river|lake/.test(id+" "+source);
+    const green=/park|wood|forest|grass|vegetation|garden|landcover/.test(id+" "+source);
+    const road=/road|street|highway|motorway|trunk|primary|secondary|tertiary|residential|service|living|pedestrian|bridge|tunnel/.test(id)||(source==="transportation"&&!/rail|tram|subway|ferry|runway|aeroway/.test(id));
+    const casing=/casing|outline|border/.test(id);
+    const set=(key,value)=>{if(value!==undefined)map.setPaintProperty(layer.id,key,value);};
     try{
-      if(layer.id.startsWith("jet-"))return;
-      if(!basePaints.has(layer.id))basePaints.set(layer.id,{paint:{...layer.paint},filter:layer.filter});
-      const original=basePaints.get(layer.id);
-      if(allowedGeometry && layer.type==="fill-extrusion"){
-        const inside=["within",allowedGeometry];
-        map.setFilter(layer.id,original.filter?["all",original.filter,inside]:inside);
+      if(layer.type==="background")set("background-color",dark?"#0b1118":paint["background-color"]??null);
+      if(layer.type==="fill"){
+        let color=paint["fill-color"]??null;
+        if(dark)color=water?"#123c55":green?"#173c2c":/building/.test(id+source)?"#253240":"#151f2a";
+        if(allowedGeometry&&color!==null)color=["case",["within",allowedGeometry],color,dark?"#343a40":"#e1e4e7"];
+        set("fill-color",color);
+        set("fill-outline-color",dark?"#2b3947":paint["fill-outline-color"]??null);
       }
-      if(allowedGeometry && (layer.type==="fill" || layer.type==="background")){
-        const key=layer.type+"-color", color=original.paint[key];
-        const gray=dark?"#343a40":"#e1e4e7";
-        if(layer.type==="fill" && color!==undefined)
-          map.setPaintProperty(layer.id,key,["case",["within",allowedGeometry],color,gray]);
+      if(layer.type==="fill-extrusion"){
+        set("fill-extrusion-color",dark?"#253240":paint["fill-extrusion-color"]??null);
+        if(allowedGeometry){const inside=["within",allowedGeometry];map.setFilter(layer.id,original.filter?["all",original.filter,inside]:inside);}
       }
-      if(layer.type!=="line" || dark)return;
-      const id=String(layer.id||"").toLowerCase();
-      const sourceLayer=String(layer["source-layer"]||"").toLowerCase();
-      const looksLikeRoad=/road|street|highway|motorway|trunk|primary|secondary|tertiary|residential|service|living|pedestrian|bridge|tunnel/.test(id);
-      const transportRoad=sourceLayer==="transportation" && !/rail|tram|subway|ferry|runway|aeroway/.test(id);
-      if(!looksLikeRoad && !transportRoad)return;
-
-      const casing=/casing|outline|border/.test(id);
-      map.setPaintProperty(layer.id,"line-color",casing?"#d8dde2":"#ffffff");
-      map.setPaintProperty(layer.id,"line-opacity",1);
-    }catch(_){}
-  });
+      if(layer.type==="line"){
+        set("line-color",road?(dark?(casing?"#192431":"#425366"):(casing?"#d8dde2":"#ffffff")):(dark?(water?"#246284":"#526173"):paint["line-color"]??null));
+        if(road)set("line-opacity",1);
+      }
+      if(layer.type==="symbol"){
+        if(layer.layout?.["text-field"]!==undefined){set("text-color",dark?"#c6d1dd":paint["text-color"]??"#000000");set("text-halo-color",dark?"#101923":paint["text-halo-color"]??"rgba(0,0,0,0)");}
+      }
+    }catch(e){console.warn("Não foi possível ajustar a cor da camada",layer.id,e);}
+  }
 }
 
 function ringArea(ring){
@@ -258,17 +268,17 @@ function buildTechzoneMask(rings){
   }
 }
 
-function renderTechzones(){
-  if(!map)return;
+function renderTechzones(updateData=true){
+  if(!map||!mapStyleReady)return;
   const style=map.getStyle();
   if(!style || !Array.isArray(style.layers))return;
   const dark=document.body.classList.contains("dark");
 
-  if(map.getSource("jet-techzones")) map.getSource("jet-techzones").setData(techzoneGeoJSON);
+  if(map.getSource("jet-techzones")){if(updateData)map.getSource("jet-techzones").setData(techzoneGeoJSON);}
   else map.addSource("jet-techzones",{type:"geojson",data:techzoneGeoJSON});
 
   if(techzoneMask){
-    if(map.getSource("jet-outside-mask")) map.getSource("jet-outside-mask").setData(techzoneMask);
+    if(map.getSource("jet-outside-mask")){if(updateData)map.getSource("jet-outside-mask").setData(techzoneMask);}
     else map.addSource("jet-outside-mask",{type:"geojson",data:techzoneMask});
 
     if(!map.getLayer("jet-outside-mask")) map.addLayer({
@@ -330,6 +340,7 @@ async function loadTechzones(){
       type:"FeatureCollection",
       features:valid.map(z=>({type:"Feature",properties:{id:z.id,name:z.name},geometry:{type:"Polygon",coordinates:[z.ring]}}))
     };
+    await jetTurfReady;
     techzoneMask=buildTechzoneMask(valid.map(z=>z.ring));
     allowedGeometry=techzoneMask?{type:"MultiPolygon",coordinates:techzoneMask.geometry.coordinates.slice(1).map(r=>[orientRing(r,true)])}:null;
     tuneBaseMap(document.body.classList.contains("dark"));
@@ -340,18 +351,13 @@ async function loadTechzones(){
 }
 
 function applyMapTheme(dark){
-  if(!map)return;
-  basePaints.clear();
-  map.setStyle(baseMapStyle(dark),{diff:false});
-  // setStyle remove sources/layers customizados. Recoloca as Techzones assim que
-  // o novo estilo estiver pronto, evitando que as delimitações sumam no Dark Mode.
-  map.once("style.load",()=>{
-    tuneBaseMap(dark);
-    renderTechzones();
-    renderScooters();
-    render();
-  });
+  if(!map||!mapStyleReady)return;
+  tuneBaseMap(dark);
+  // Nenhuma fonte ou camada é removida: visibilidade e seleção permanecem iguais.
+  if(map.getLayer("jet-scooter-points"))map.setPaintProperty("jet-scooter-points","circle-stroke-color",dark?"#dcecff":"#ffffff");
+  renderTechzones(false);
 }
+
 
 function initMap(){
   map=new maplibregl.Map({
@@ -390,6 +396,7 @@ function initMap(){
     loadTechzones();
   });
   map.on("style.load",()=>{
+    mapStyleReady=true;
     const dark=document.body.classList.contains("dark");
     updateMapDetail();
     tuneBaseMap(dark);
@@ -411,18 +418,26 @@ function initMap(){
 
 }
 
-async function all(x,signal){
+async function all(x,signal,onProgress){
   const page=async i=>{
+    if(i===1&&jetBootstrapPages.has(x)){
+      const pending=jetBootstrapPages.get(x);jetBootstrapPages.delete(x);
+      const cached=await pending;
+      if(signal?.aborted)throw new DOMException("Consulta cancelada","AbortError");
+      if(cached&&Array.isArray(cached.entries))return cached;
+    }
     const r=await fetch(`${B}/${x}?city_id=${C}&page=${i}&limit=1000`,{cache:"no-store",signal});
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     return r.json();
   };
   const first=await page(1), entries=[...(first.entries||[])];
+  onProgress?.(entries.slice());
   // Consulta as páginas restantes em paralelo (até quatro por vez).
   for(let start=2;start<=Number(first.total_pages);start+=4){
     const numbers=Array.from({length:Math.min(4,Number(first.total_pages)-start+1)},(_,i)=>start+i);
     const pages=await Promise.all(numbers.map(page));
     pages.forEach(p=>entries.push(...(p.entries||[])));
+    onProgress?.(entries.slice());
   }
   return entries;
 }
@@ -586,7 +601,7 @@ function showParkingPopup(id){
 }
 
 function render(){
-  if(!map || !map.isStyleLoaded()) return;
+  if(!map||!mapStyleReady)return;
 
   const f=document.getElementById("f").value,q=document.getElementById("q").value.toLowerCase();
 
@@ -648,6 +663,49 @@ function requestLocation(center){
   }
 }
 
+function updateParkingStats(){
+  document.getElementById("p").textContent=P.length.toLocaleString("pt-BR");
+  document.getElementById("z").textContent=P.filter(x=>(+x.bikes_count||0)==0).length.toLocaleString("pt-BR");
+  document.getElementById("m").textContent=P.filter(isMonitor).length.toLocaleString("pt-BR");
+}
+// A última consulta completa acelera reaberturas; a API continua sendo consultada.
+let snapshotDatabase=null;
+function openSnapshotDatabase(){
+  if(snapshotDatabase)return snapshotDatabase;
+  snapshotDatabase=new Promise(resolve=>{
+    try{
+      const request=indexedDB.open("jet-monitor-snapshots",1);
+      request.onupgradeneeded=()=>request.result.createObjectStore("snapshots",{keyPath:"kind"});
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>resolve(null);request.onblocked=()=>resolve(null);
+    }catch(_){resolve(null);}
+  });return snapshotDatabase;
+}
+async function saveSnapshot(kind,data,updatedAt){
+  const db=await openSnapshotDatabase();if(!db)return;
+  try{const tx=db.transaction("snapshots","readwrite");tx.objectStore("snapshots").put({kind,data,updatedAt});tx.onerror=()=>{};}catch(_){}
+}
+async function restoreSnapshots(){
+  const db=await openSnapshotDatabase();if(!db)return;
+  for(const kind of ["parkings","bikes"]){
+    try{
+      const request=db.transaction("snapshots","readonly").objectStore("snapshots").get(kind);
+      request.onsuccess=()=>{
+        const saved=request.result;
+        if(!saved||!Array.isArray(saved.data)||!saved.data.length||!Number.isFinite(saved.updatedAt)||Date.now()-saved.updatedAt>300000)return;
+        if(kind==="parkings"&&!P.length&&!parkingsUpdatedAt){
+          P=saved.data;parkingsUpdatedAt=saved.updatedAt;parkingUsingCache=true;
+          updateParkingStats();updateFreshness();render();
+        }else if(kind==="bikes"&&!S.length&&!bikesUpdatedAt){
+          S=saved.data;bikesLoaded=true;bikesUpdatedAt=saved.updatedAt;scooterData=bikeFeatures(S);
+          document.getElementById("b").textContent=S.length.toLocaleString("pt-BR");
+          renderScooters();updateScooterButton();
+        }
+      };
+    }catch(_){}
+  }
+}
+
 // Atualiza o painel existente sem fechá-lo ou deslocar a câmera.
 function refreshParkingPopup(){
   if(!parkingPopup||!parkingPopupId)return;
@@ -673,12 +731,15 @@ function load(){
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
   parkingRequest=(async()=>{
     try{
-      const next=await all("parkings",controller.signal);
-      P=next;parkingsUpdatedAt=Date.now();parkingFetchFailed=false;parkingRetryMs=PARKING_REFRESH_MS;
+      const progressive=!P.length;
+      const next=await all("parkings",controller.signal,progressive?partial=>{
+        if(parkingUsingCache)return;
+        P=partial;updateParkingStats();render();
+      }:undefined);
+      P=next;parkingsUpdatedAt=Date.now();parkingFetchFailed=false;parkingUsingCache=false;parkingRetryMs=PARKING_REFRESH_MS;
       updateFreshness();
-      document.getElementById("p").textContent=P.length.toLocaleString("pt-BR");
-      document.getElementById("z").textContent=P.filter(x=>(+x.bikes_count||0)==0).length.toLocaleString("pt-BR");
-      document.getElementById("m").textContent=P.filter(x=>isMonitor(x)).length.toLocaleString("pt-BR");
+      updateParkingStats();
+      saveSnapshot("parkings",P,parkingsUpdatedAt);
       render();refreshParkingPopup();
       document.getElementById("s").textContent="Mapa carregado — estacionamentos atualizados automaticamente a cada 15s.";
       return true;
@@ -717,7 +778,7 @@ function bikeFeatures(bikes){
   })};
 }
 function renderScooters(){
-  if(!map||!map.isStyleLoaded())return;
+  if(!map||!mapStyleReady)return;
   let source=map.getSource("jet-scooters");
   if(!source){
     map.addSource("jet-scooters",{type:"geojson",data:scooterData});
@@ -769,7 +830,12 @@ async function loadBikes(force=false){
   if(bikesLoaded&&!force){renderScooters();return true;}
   bikesRequest=(async()=>{
     try{
-      const next=await all("bikes");S=next;bikesLoaded=true;bikesUpdatedAt=Date.now();scooterData=bikeFeatures(S);
+      const progressive=!S.length;
+      const next=await all("bikes",undefined,progressive?partial=>{
+        if(bikesLoaded)return;
+        S=partial;scooterData=bikeFeatures(S);renderScooters();updateScooterButton();
+      }:undefined);S=next;bikesLoaded=true;bikesUpdatedAt=Date.now();scooterData=bikeFeatures(S);
+      saveSnapshot("bikes",S,bikesUpdatedAt);
       document.getElementById("b").textContent=S.length.toLocaleString("pt-BR");
       const v=S.filter(x=>x.battery_percent!=null).map(x=>Number(x.battery_percent)).filter(Number.isFinite);
       document.getElementById("bat").textContent=v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)+"%":"—";
@@ -847,8 +913,8 @@ function updateFreshness(){
   const el=document.getElementById("freshness");if(!el)return;
   const time=parkingsUpdatedAt?new Date(parkingsUpdatedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"}):null;
   el.classList.toggle("fetch-error",parkingFetchFailed);
-  el.textContent=parkingFetchFailed?(time?`Falha na consulta · último sucesso ${time}`:"Falha na consulta · tente atualizar"):(time?`Consultado às ${time}`:"Aguardando consulta");
-  el.title="Consulta automática a cada 15 segundos enquanto o app estiver visível. Cada ponto informa sua própria atualização na JET.";
+  el.textContent=parkingFetchFailed?(time?`Falha na consulta · último sucesso ${time}`:"Falha na consulta · tente atualizar"):(parkingUsingCache?`Dados salvos às ${time} · atualizando`:(time?`Consultado às ${time}`:"Aguardando consulta"));
+  el.title=parkingUsingCache?"Exibindo a última consulta salva enquanto buscamos dados atuais da JET.":"Consulta automática a cada 15 segundos enquanto o app estiver visível. Cada ponto informa sua própria atualização na JET.";
 }
 function updateOperationalUI(points){
   const monitored=points.filter(isMonitor),empty=monitored.filter(x=>(Number(x.bikes_count)||0)===0).length;
@@ -862,7 +928,7 @@ function updateOperationalUI(points){
 }
 
 initMap();
-document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible||document.getElementById("parkingBikesDialog").open)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Todos":v==="monitor"?"🟡 Monitor":"🔴 Zerados";render();};document.getElementById("q").oninput=render;load().then(()=>loadBikes());setInterval(()=>{if(!document.hidden&&navigator.onLine!==false)refreshActiveBikes();},15000);setInterval(loadTechzones,600000);
+document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible||document.getElementById("parkingBikesDialog").open)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Todos":v==="monitor"?"🟡 Monitor":"🔴 Zerados";render();};document.getElementById("q").oninput=render;restoreSnapshots();load();loadBikes(true);setInterval(()=>{if(!document.hidden&&navigator.onLine!==false)refreshActiveBikes();},15000);setInterval(loadTechzones,600000);
 </script>
 <script>
 const scooterBtn=document.getElementById("scooterBtn");

@@ -467,7 +467,11 @@ function applyMapTheme(dark){
   if(!map||!mapStyleReady)return;
   tuneBaseMap(dark);
   // Nenhuma fonte ou camada é removida: visibilidade e seleção permanecem iguais.
-  if(map.getLayer("jet-scooter-points"))map.setPaintProperty("jet-scooter-points","circle-stroke-color",dark?"#dcecff":"#ffffff");
+  if(map.getLayer("jet-scooter-points")){
+    map.setPaintProperty("jet-scooter-points","circle-stroke-color",dark?"#dcecff":"#ffffff");
+    map.setPaintProperty("jet-scooter-points","circle-color",scooterColorExpression(dark));
+  }
+  if(searchBikeMarker)styleSearchedScooter(searchBikeMarker.getElement(),dark);
   renderTechzones(false);
 }
 
@@ -1020,6 +1024,24 @@ window.addEventListener("online",resumeMonitor);
 window.addEventListener("pageshow",resumeMonitor);
 window.addEventListener("offline",()=>{clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;clearTimeout(bikeRefreshTimer);bikeRefreshTimer=null;clearTimeout(techzoneTimer);techzoneTimer=null;});
 
+function scooterColorStatus(bike){
+  const sub=String(bike.business_sub_status||"").toLowerCase();
+  if(sub)return sub;
+  return ({operation:"operationavailable",transportation:"transportationinternal",
+    maintenance:"maintenancerequired",outofservice:"outofservicenotrecoverable"})[String(bike.business_status||"").toLowerCase()]||"";
+}
+function scooterStatusPalette(dark){
+  return {operationavailable:"#168dcc",operationrent:"#9333ea",transportationinternal:"#f97316",
+    maintenancerequired:"#ef4444",outofservicenotrecoverable:dark?"#9ca3af":"#000000"};
+}
+function scooterColorExpression(dark){
+  return ["match",["get","colorStatus"],...Object.entries(scooterStatusPalette(dark)).flat(),"#168dcc"];
+}
+function styleSearchedScooter(el,dark){
+  const color=scooterStatusPalette(dark)[el.dataset.colorStatus]||"#168dcc";
+  el.style.background=color;
+  el.style.boxShadow=`0 0 0 4px ${color}44`;
+}
 function bikeFeatures(bikes){
   return {type:"FeatureCollection",features:bikes.flatMap(x=>{
     const rawLat=x.location_lat??x.latitude, rawLng=x.location_lng??x.longitude;
@@ -1029,7 +1051,8 @@ function bikeFeatures(bikes){
     return [{type:"Feature",geometry:{type:"Point",coordinates:[lng,lat]},properties:{
       id:String(x.id||""),identifier:String(x.identifier||x.name||"Patinete"),
       battery:x.battery_percent==null?null:Math.round(Number(x.battery_percent)*100),
-      status:String(x.business_status||"—"),parkingId:String(x.parking_id||"")
+      status:String(x.business_status||"—"),subStatus:String(x.business_sub_status||""),
+      colorStatus:scooterColorStatus(x),parkingId:String(x.parking_id||"")
     }}];
   })};
 }
@@ -1046,7 +1069,7 @@ function renderScooters(){
     id:"jet-scooter-points",type:"circle",source:"jet-scooters",
     layout:{visibility:scootersVisible?"visible":"none"},
     paint:{"circle-radius":["interpolate",["linear"],["zoom"],10,2,14,3,18,4.5],
-      "circle-color":"#168dcc","circle-opacity":.8,"circle-stroke-width":1,
+      "circle-color":scooterColorExpression(document.body.classList.contains("dark")),"circle-opacity":.8,"circle-stroke-width":1,
       "circle-stroke-color":document.body.classList.contains("dark")?"#dcecff":"#ffffff"}
   });
   else map.setLayoutProperty("jet-scooter-points","visibility",scootersVisible?"visible":"none");
@@ -1282,6 +1305,8 @@ function selectSearchHit(hit){
   }else{
     coordinates=hit.item.geometry.coordinates;
     const el=document.createElement("div");el.className="searched-scooter";el.textContent="🛴";el.title=hit.name;
+    el.dataset.colorStatus=hit.item.properties.colorStatus;
+    styleSearchedScooter(el,document.body.classList.contains("dark"));
     searchBikeMarker=new maplibregl.Marker({element:el,anchor:"center",subpixelPositioning:true}).setLngLat(coordinates).addTo(map);
     el.onclick=()=>showScooterPopup({features:[hit.item]},true);
   }

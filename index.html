@@ -107,6 +107,27 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 .parking-bikes-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:14px}
 .parking-bikes-list .bike-battery{font-weight:800;white-space:nowrap}.parking-bikes-message{padding:16px 0;color:var(--muted);line-height:1.5}
 .parking-bikes-retry{background:var(--bg);color:var(--text);border-color:var(--line);cursor:pointer}
+
+/* Dimensões acompanham o zoom sem alterar o transform de posição do MapLibre. */
+.jet-zoom-popup{--popup-scale:1}
+.jet-zoom-popup .maplibregl-popup-content{font-size:calc(12px * var(--popup-scale));padding:.8em 1em 1em;border-radius:.9em!important;max-height:calc(100dvh - 190px);overflow:auto;overscroll-behavior:contain}
+.jet-parking-balloon .maplibregl-popup-content{width:24em}
+.jet-scooter-balloon .maplibregl-popup-content{width:20.5em}
+.jet-zoom-popup .maplibregl-popup-content{max-width:100%}
+.jet-zoom-popup .popup{font-size:1em;line-height:1.4;overflow-wrap:anywhere}
+.jet-zoom-popup .parking-popup{max-width:none}
+.jet-zoom-popup .popup b{font-size:1.08em}
+.jet-zoom-popup .popup-title{font-size:1.17em;margin-bottom:.4em;padding-right:1.2em}
+.jet-zoom-popup .popup-row{font-size:1em;margin-bottom:.4em}
+.jet-zoom-popup .popup-status{margin:.35em 0}
+.jet-zoom-popup .popup-update{font-size:.88em;margin-bottom:.55em}
+.jet-zoom-popup .popup-action{font-size:1.17em;padding:.55em;border-radius:.6em;margin:.5em 0}
+.jet-zoom-popup .popup-action small{font-size:.76em;margin-top:.25em}
+.jet-zoom-popup .popup-nav{gap:.5em;margin:.55em 0 0}
+.jet-zoom-popup .nav-btn{font-size:.92em;border-radius:.65em;padding:.65em .4em;min-height:32px}
+.jet-zoom-popup .parking-bikes-btn{font-size:.95em;padding:.7em .5em;margin:.65em 0;border-radius:.65em;min-height:32px}
+.jet-zoom-popup .maplibregl-popup-close-button{font-size:1.5em;padding:0;width:32px;height:32px;background:transparent;color:#172033;line-height:1;cursor:pointer}
+.jet-scooter-balloon .popup>strong{display:block;padding-right:1.3em;margin-bottom:.3em}
 </style></head><body>
 <header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 15s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option></select><input id="q" placeholder="Buscar ponto"></div></header>
 <main><div id="map"></div><div class="map-topbar"><div class="search-box"><input type="search" id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Estacionamento ou nº do patinete"><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">🟡 Monitor</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar</button></div><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small></div></div>
@@ -384,6 +405,8 @@ function initMap(){
   map.on("mouseenter","jet-scooter-points",()=>{map.getCanvas().style.cursor="pointer"});
   map.on("mouseleave","jet-scooter-points",()=>{map.getCanvas().style.cursor=""});
   map.on("zoomend",updateMapDetail);
+  map.on("zoom",queuePopupSizing);
+  map.on("resize",queuePopupSizing);
   // As camadas acompanham a câmera sem reconstrução dos estacionamentos.
 
 }
@@ -514,6 +537,28 @@ function handleMapClick(e){
     if(features.length){parkingPopup?.remove();showScooterPopup({...e,features});}
   }
 }
+let popupSizingFrame=null;
+function popupZoomScale(zoom){
+  // Variação gradual e limitada: compacto ao afastar, maior ao aproximar.
+  return Math.max(.84,Math.min(1.04,.84+(zoom-11)*(.20/7)));
+}
+function updatePopupSizing(){
+  if(!map)return;
+  const scale=popupZoomScale(map.getZoom());
+  const available=Math.max(120,map.getContainer().clientWidth-32);
+  for(const popup of [parkingPopup,scooterPopup]){
+    if(!popup||!popup.isOpen())continue;
+    const element=popup.getElement();
+    element.style.setProperty("--popup-scale",scale.toFixed(4));
+    const base=element.classList.contains("jet-parking-balloon")?288:246;
+    // setMaxWidth recalcula a âncora após a mudança das dimensões.
+    popup.setMaxWidth(Math.min(base*scale,available).toFixed(2)+"px");
+  }
+}
+function queuePopupSizing(){
+  if(popupSizingFrame!==null||(!parkingPopup&&!scooterPopup))return;
+  popupSizingFrame=requestAnimationFrame(()=>{popupSizingFrame=null;updatePopupSizing();});
+}
 function showParkingPopup(id){
   const x=parkingById.get(String(id));if(!x)return;
   if(scooterPopup){scooterPopup.remove();scooterPopup=null;}
@@ -521,7 +566,7 @@ function showParkingPopup(id){
   const [st,cl]=stat(x),action=parkingAction(x),lat=Number(x.latitude),lng=Number(x.longitude);
   const googleUrl=`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
   const wazeUrl=`https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
-  const popup=new maplibregl.Popup({offset:16,maxWidth:"330px"}).setLngLat([lng,lat]).setHTML(
+  const popup=new maplibregl.Popup({offset:16,maxWidth:"288px",className:"jet-zoom-popup jet-parking-balloon"}).setLngLat([lng,lat]).setHTML(
     `<div class="popup parking-popup">
       <div class="popup-title">${escapeHtml(x.name)}</div><div class="popup-action"><span class="parking-action-text">${action.text}</span><small>${action.kind==="bring"||action.kind==="take"?"Necessidade total do ponto · até 2 por movimentação":"Confira a situação antes de movimentar"}</small></div>
       <div class="popup-row">🛴 <b class="parking-current-count">${x.bikes_count||0}</b> patinetes &nbsp; • &nbsp; 🎯 Meta: <b class="parking-target-count">${x.target_bikes_count??"—"}</b></div>
@@ -536,6 +581,7 @@ function showParkingPopup(id){
   parkingPopup=popup;
   popup.on("close",()=>{if(parkingPopup===popup){parkingPopup=null;parkingPopupId=null;}});
   popup.addTo(map);
+  updatePopupSizing();
   popup.getElement().querySelector(".parking-bikes-btn").onclick=e=>{e.stopPropagation();openParkingBikes(P.find(p=>String(p.id)===String(id))||x);};
 }
 
@@ -613,6 +659,7 @@ function refreshParkingPopup(){
   box.querySelector(".parking-target-count").textContent=x.target_bikes_count??"—";
   const status=box.querySelector(".popup-status");status.className="popup-status "+cl;status.textContent=st;
   box.querySelector(".popup-update").textContent="Última atualização: "+(x.bc_updated_at||"—");
+  queuePopupSizing();
 }
 function scheduleParkingRefresh(){
   clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;
@@ -714,7 +761,8 @@ function showScooterPopup(e,fromSearch=false){
       const a=document.createElement("a");a.className="nav-btn "+kind;a.textContent=label;a.href=url;a.target="_blank";a.rel="noopener";nav.appendChild(a);
     });box.appendChild(nav);
   }
-  scooterPopup=new maplibregl.Popup({offset:8,maxWidth:"280px"}).setLngLat(feature.geometry.coordinates).setDOMContent(box).addTo(map);
+  scooterPopup=new maplibregl.Popup({offset:8,maxWidth:"246px",className:"jet-zoom-popup jet-scooter-balloon"}).setLngLat(feature.geometry.coordinates).setDOMContent(box).addTo(map);
+  updatePopupSizing();
 }
 async function loadBikes(force=false){
   if(bikesRequest)return bikesRequest;

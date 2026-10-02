@@ -108,7 +108,7 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 .parking-bikes-list .bike-battery{font-weight:800;white-space:nowrap}.parking-bikes-message{padding:16px 0;color:var(--muted);line-height:1.5}
 .parking-bikes-retry{background:var(--bg);color:var(--text);border-color:var(--line);cursor:pointer}
 </style></head><body>
-<header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 60s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option></select><input id="q" placeholder="Buscar ponto"></div></header>
+<header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 15s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option></select><input id="q" placeholder="Buscar ponto"></div></header>
 <main><div id="map"></div><div class="map-topbar"><div class="search-box"><input type="search" id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Estacionamento ou nº do patinete"><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">🟡 Monitor</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar</button></div><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small></div></div>
 <details class="map-legend"><summary>Como ler o mapa</summary><div class="legend-grid"><span><i class="legend-dot" style="background:#ff3b30"></i>Vazio · abastecer primeiro</span><span><i class="legend-dot" style="background:#ff9500"></i>1 patinete · prioridade</span><span><i class="legend-dot" style="background:#ffc857"></i>Abaixo da meta · levar</span><span><i class="legend-dot" style="background:#21d19a"></i>Meta atingida · verificar excesso</span><span><i class="legend-dot" style="background:#1677ff"></i>Fora do monitor</span><small>Número no círculo = quantidade atual.<br>↑ levar · ↓ retirar. Aproxime para ler a ação.</small></div></details>
 <section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Meta</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 30%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
@@ -118,6 +118,8 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 <script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script><script>
 let parkingsUpdatedAt=0, parkingFetchFailed=false, currentVisibleParkings=[];
+const PARKING_REFRESH_MS=15000, BIKE_REFRESH_MS=60000;
+let parkingRequest=null, parkingRefreshTimer=null, parkingRetryMs=PARKING_REFRESH_MS;
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
 let searchSelection=null, searchBikeMarker=null, searchRevision=0;
 let scootersVisible=false, bikesRequest=null, scooterPopup=null, bikesUpdatedAt=0;
@@ -386,9 +388,9 @@ function initMap(){
 
 }
 
-async function all(x){
+async function all(x,signal){
   const page=async i=>{
-    const r=await fetch(`${B}/${x}?city_id=${C}&page=${i}&limit=1000`,{cache:"no-store"});
+    const r=await fetch(`${B}/${x}?city_id=${C}&page=${i}&limit=1000`,{cache:"no-store",signal});
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     return r.json();
   };
@@ -521,8 +523,8 @@ function showParkingPopup(id){
   const wazeUrl=`https://waze.com/ul?ll=${lat}%2C${lng}&navigate=yes`;
   const popup=new maplibregl.Popup({offset:16,maxWidth:"330px"}).setLngLat([lng,lat]).setHTML(
     `<div class="popup parking-popup">
-      <div class="popup-title">${escapeHtml(x.name)}</div><div class="popup-action">${action.text}<small>${action.kind==="bring"||action.kind==="take"?"Necessidade total do ponto · até 2 por movimentação":"Confira a situação antes de movimentar"}</small></div>
-      <div class="popup-row">🛴 <b>${x.bikes_count||0}</b> patinetes &nbsp; • &nbsp; 🎯 Meta: <b>${x.target_bikes_count??"—"}</b></div>
+      <div class="popup-title">${escapeHtml(x.name)}</div><div class="popup-action"><span class="parking-action-text">${action.text}</span><small>${action.kind==="bring"||action.kind==="take"?"Necessidade total do ponto · até 2 por movimentação":"Confira a situação antes de movimentar"}</small></div>
+      <div class="popup-row">🛴 <b class="parking-current-count">${x.bikes_count||0}</b> patinetes &nbsp; • &nbsp; 🎯 Meta: <b class="parking-target-count">${x.target_bikes_count??"—"}</b></div>
       <div class="popup-status ${cl}">${st}</div>
       <div class="popup-update">Última atualização: ${escapeHtml(x.bc_updated_at||"—")}</div>
       <button type="button" class="parking-bikes-btn">🛴 Ver patinetes deste estacionamento</button>
@@ -534,7 +536,7 @@ function showParkingPopup(id){
   parkingPopup=popup;
   popup.on("close",()=>{if(parkingPopup===popup){parkingPopup=null;parkingPopupId=null;}});
   popup.addTo(map);
-  popup.getElement().querySelector(".parking-bikes-btn").onclick=e=>{e.stopPropagation();openParkingBikes(x);};
+  popup.getElement().querySelector(".parking-bikes-btn").onclick=e=>{e.stopPropagation();openParkingBikes(P.find(p=>String(p.id)===String(id))||x);};
 }
 
 function render(){
@@ -600,15 +602,59 @@ function requestLocation(center){
   }
 }
 
-async function load(){try{
-  P=await all("parkings");parkingsUpdatedAt=Date.now();parkingFetchFailed=false;
-  updateFreshness();
-  document.getElementById("p").textContent=P.length.toLocaleString("pt-BR");
-  document.getElementById("z").textContent=P.filter(x=>(+x.bikes_count||0)==0).length.toLocaleString("pt-BR");
-  document.getElementById("m").textContent=P.filter(x=>isMonitor(x)).length.toLocaleString("pt-BR");
-  render();
-  document.getElementById("s").textContent="Mapa carregado — dados de patinetes serão consultados quando necessários.";
-}catch(e){parkingFetchFailed=true;updateFreshness();document.getElementById("s").textContent="Erro ao consultar a API: "+e.message}}
+// Atualiza o painel existente sem fechá-lo ou deslocar a câmera.
+function refreshParkingPopup(){
+  if(!parkingPopup||!parkingPopupId)return;
+  const x=P.find(p=>String(p.id)===parkingPopupId);if(!x)return;
+  const box=parkingPopup.getElement(),[st,cl]=stat(x),action=parkingAction(x);
+  box.querySelector(".parking-action-text").textContent=action.text;
+  box.querySelector(".popup-action small").textContent=action.kind==="bring"||action.kind==="take"?"Necessidade total do ponto · até 2 por movimentação":"Confira a situação antes de movimentar";
+  box.querySelector(".parking-current-count").textContent=x.bikes_count||0;
+  box.querySelector(".parking-target-count").textContent=x.target_bikes_count??"—";
+  const status=box.querySelector(".popup-status");status.className="popup-status "+cl;status.textContent=st;
+  box.querySelector(".popup-update").textContent="Última atualização: "+(x.bc_updated_at||"—");
+}
+function scheduleParkingRefresh(){
+  clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;
+  if(document.hidden||navigator.onLine===false)return;
+  parkingRefreshTimer=setTimeout(()=>load(),parkingRetryMs);
+}
+function load(){
+  // Botão, retorno ao app e timer compartilham a mesma consulta em andamento.
+  if(parkingRequest)return parkingRequest;
+  clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),12000);
+  parkingRequest=(async()=>{
+    try{
+      const next=await all("parkings",controller.signal);
+      P=next;parkingsUpdatedAt=Date.now();parkingFetchFailed=false;parkingRetryMs=PARKING_REFRESH_MS;
+      updateFreshness();
+      document.getElementById("p").textContent=P.length.toLocaleString("pt-BR");
+      document.getElementById("z").textContent=P.filter(x=>(+x.bikes_count||0)==0).length.toLocaleString("pt-BR");
+      document.getElementById("m").textContent=P.filter(x=>isMonitor(x)).length.toLocaleString("pt-BR");
+      render();refreshParkingPopup();
+      document.getElementById("s").textContent="Mapa carregado — estacionamentos atualizados automaticamente a cada 15s.";
+      return true;
+    }catch(e){
+      parkingFetchFailed=true;parkingRetryMs=Math.min(parkingRetryMs*2,120000);updateFreshness();
+      document.getElementById("s").textContent="Erro ao consultar a API: "+(e.name==="AbortError"?"tempo de resposta excedido":e.message);
+      return false;
+    }
+  })().finally(()=>{clearTimeout(timeout);parkingRequest=null;scheduleParkingRefresh();});
+  return parkingRequest;
+}
+function refreshActiveBikes(){
+  const needed=scootersVisible||document.getElementById("parkingBikesDialog").open;
+  if(needed&&Date.now()-bikesUpdatedAt>=BIKE_REFRESH_MS)loadBikes(true);
+}
+function resumeMonitor(){
+  if(document.hidden||navigator.onLine===false){clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;return;}
+  parkingRetryMs=PARKING_REFRESH_MS;
+  load();refreshActiveBikes();
+}
+document.addEventListener("visibilitychange",resumeMonitor);
+window.addEventListener("online",resumeMonitor);
+window.addEventListener("offline",()=>{clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;});
 
 function bikeFeatures(bikes){
   return {type:"FeatureCollection",features:bikes.flatMap(x=>{
@@ -723,7 +769,7 @@ async function openParkingBikes(parking){
   document.getElementById("parkingBikesName").textContent=parking.name;
   content.textContent="Consultando patinetes…";
   if(!dialog.open)dialog.showModal();
-  const ok=await loadBikes(bikesLoaded&&Date.now()-bikesUpdatedAt>60000);
+  const ok=await loadBikes(bikesLoaded&&Date.now()-bikesUpdatedAt>BIKE_REFRESH_MS);
   if(revision!==parkingBikesRevision||!dialog.open)return;
   if(ok){renderParkingBikes();return;}
   content.replaceChildren();const msg=document.createElement("p"),retry=document.createElement("button");
@@ -754,7 +800,7 @@ function updateFreshness(){
   const time=parkingsUpdatedAt?new Date(parkingsUpdatedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"}):null;
   el.classList.toggle("fetch-error",parkingFetchFailed);
   el.textContent=parkingFetchFailed?(time?`Falha na consulta · último sucesso ${time}`:"Falha na consulta · tente atualizar"):(time?`Consultado às ${time}`:"Aguardando consulta");
-  el.title="Horário da consulta dos estacionamentos. Cada ponto informa sua própria atualização.";
+  el.title="Consulta automática a cada 15 segundos enquanto o app estiver visível. Cada ponto informa sua própria atualização na JET.";
 }
 function updateOperationalUI(points){
   const monitored=points.filter(isMonitor),empty=monitored.filter(x=>(Number(x.bikes_count)||0)===0).length;
@@ -768,7 +814,7 @@ function updateOperationalUI(points){
 }
 
 initMap();
-document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Todos":v==="monitor"?"🟡 Monitor":"🔴 Zerados";render();};document.getElementById("q").oninput=render;load().then(()=>loadBikes());setInterval(()=>{load();if(scootersVisible)loadBikes(true)},60000);setInterval(loadTechzones,600000);
+document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible||document.getElementById("parkingBikesDialog").open)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Todos":v==="monitor"?"🟡 Monitor":"🔴 Zerados";render();};document.getElementById("q").oninput=render;load().then(()=>loadBikes());setInterval(()=>{if(!document.hidden&&navigator.onLine!==false)refreshActiveBikes();},15000);setInterval(loadTechzones,600000);
 </script>
 <script>
 const scooterBtn=document.getElementById("scooterBtn");
@@ -776,7 +822,7 @@ scooterBtn.onclick=async()=>{
   scootersVisible=!scootersVisible;updateScooterButton();renderScooters();
   if(!scootersVisible){if(scooterPopup)scooterPopup.remove();return;}
   if(!bikesLoaded)scooterBtn.textContent="🛴 Aguarde";
-  await loadBikes(bikesLoaded&&Date.now()-bikesUpdatedAt>60000);
+  await loadBikes(bikesLoaded&&Date.now()-bikesUpdatedAt>BIKE_REFRESH_MS);
 };
 updateScooterButton();
 const themeBtn=document.getElementById("themeBtn"),infoBtn=document.getElementById("infoBtn"),infoPanel=document.getElementById("infoPanel"),mapSearch=document.getElementById("mapSearch"),searchSuggestions=document.getElementById("searchSuggestions"),filterBtn=document.getElementById("filterBtn"),filterMenu=document.getElementById("filterMenu"),filterWrap=document.querySelector(".filter-wrap");

@@ -167,6 +167,8 @@ const parkingHitLayers=["jet-parking-points","jet-parking-counts","jet-parking-a
 
 let allowedGeometry=null, basePaints=new Map();
 let techzoneGeoJSON={type:"FeatureCollection",features:[]}, techzoneMask=null, techzoneCount=0;
+let techzoneRequest=null,techzoneTimer=null,techzoneRetryMs=15000,techzonesUpdatedAt=0,techzonesUsingCache=false;
+const TECHZONE_REFRESH_MS=600000,TECHZONE_CACHE_KEY="jetTechzonesV1";
 
 // Base cartográfica vetorial com equilíbrio entre detalhe e limpeza visual.
 // No modo claro usamos Liberty para preservar parques verdes e água azul.
@@ -332,39 +334,94 @@ function renderTechzones(updateData=true){
   }
 }
 
-async function loadTechzones(){
+function validTechzoneSnapshot(saved){
+  const data=saved?.data;
+  return Number.isFinite(saved?.updatedAt)&&Date.now()-saved.updatedAt<86400000&&
+    data?.geoJSON?.type==="FeatureCollection"&&Array.isArray(data.geoJSON.features)&&data.geoJSON.features.length>0&&
+    data.geoJSON.features.every(f=>f.geometry?.type==="Polygon"&&Array.isArray(f.geometry.coordinates?.[0])&&f.geometry.coordinates[0].length>=4)&&
+    data.mask?.geometry?.type==="Polygon"&&Array.isArray(data.mask.geometry.coordinates)&&data.mask.geometry.coordinates.length>1&&
+    data.allowedGeometry?.type==="MultiPolygon"&&Array.isArray(data.allowedGeometry.coordinates)&&data.allowedGeometry.coordinates.length>0;
+}
+function applyTechzoneSnapshot(saved){
+  if(!validTechzoneSnapshot(saved)||techzonesUpdatedAt>=saved.updatedAt)return;
+  techzoneGeoJSON=saved.data.geoJSON;techzoneMask=saved.data.mask;allowedGeometry=saved.data.allowedGeometry;
+  techzoneCount=techzoneGeoJSON.features.length;techzonesUpdatedAt=saved.updatedAt;techzonesUsingCache=true;
+  if(mapStyleReady){tuneBaseMap(document.body.classList.contains("dark"));renderTechzones();}
+}
+async function restoreTechzoneSnapshot(){
+  // A cópia pequena permite restaurar as bordas antes de abrir o banco de dados.
+  try{applyTechzoneSnapshot(JSON.parse(localStorage.getItem(TECHZONE_CACHE_KEY)));}catch(_){}
+  const db=await openSnapshotDatabase();if(!db)return;
   try{
-    const listResp=await fetch(`${B}/techzones?city_id=${C}`,{cache:"no-store"});
-    if(!listResp.ok)throw new Error(`Techzones: HTTP ${listResp.status}`);
-    const list=await listResp.json();
-    if(!Array.isArray(list))throw new Error("Resposta de Techzones inválida");
-
-    const details=await Promise.all(list.map(async z=>{
-      try{
-        const r=await fetch(`${B}/techzones/${z.id}`,{cache:"no-store"});
-        if(!r.ok)return null;
-        const d=await r.json();
-        const pts=Array.isArray(d.coordinates)?d.coordinates:[];
-        const ring=closeRing(pts.map(p=>[Number(p.lon),Number(p.lat)]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1])));
-        if(ring.length<4)return null;
+    const request=db.transaction("snapshots","readonly").objectStore("snapshots").get("techzones");
+    request.onsuccess=()=>applyTechzoneSnapshot(request.result);
+  }catch(_){}
+}
+function scheduleTechzoneRefresh(delay){
+  clearTimeout(techzoneTimer);techzoneTimer=null;
+  if(document.hidden||navigator.onLine===false)return;
+  techzoneTimer=setTimeout(loadTechzones,delay);
+}
+async function waitForTurf(){
+  if(typeof turf!=="undefined"&&typeof turf.union==="function")return;
+  let timer;
+  try{
+    const ready=await Promise.race([jetTurfReady,new Promise(resolve=>{timer=setTimeout(()=>resolve(false),8000);})]);
+    if(ready&&typeof turf!=="undefined"&&typeof turf.union==="function")return;
+  }finally{clearTimeout(timer);}
+  // Se o primeiro CDN falhar, tenta uma segunda origem sem travar o mapa.
+  await new Promise((resolve,reject)=>{
+    const script=document.createElement("script");script.src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js";script.async=true;
+    const timeout=setTimeout(()=>finish(new Error("Tempo excedido ao carregar as delimitações")),8000);
+    function finish(error){clearTimeout(timeout);script.onload=null;script.onerror=null;if(error){script.remove();reject(error);}else resolve();}
+    script.onload=()=>finish(typeof turf!=="undefined"&&typeof turf.union==="function"?null:new Error("Biblioteca de zonas indisponível"));
+    script.onerror=()=>finish(new Error("Biblioteca de zonas indisponível"));document.head.appendChild(script);
+  });
+}
+function loadTechzones(){
+  if(techzoneRequest)return techzoneRequest;
+  clearTimeout(techzoneTimer);techzoneTimer=null;
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
+  techzoneRequest=(async()=>{
+    try{
+      const get=async url=>{const response=await fetch(url,{cache:"no-store",signal:controller.signal});if(!response.ok)throw new Error(`Techzones: HTTP ${response.status}`);return response.json();};
+      const list=await get(`${B}/techzones?city_id=${C}`);
+      if(!Array.isArray(list)||!list.length)throw new Error("Resposta de Techzones vazia ou inválida");
+      const valid=await Promise.all(list.map(async z=>{
+        const d=await get(`${B}/techzones/${z.id}`),pts=Array.isArray(d.coordinates)?d.coordinates:[];
+        const coordinates=pts.map(p=>[Number(p?.lon),Number(p?.lat)]);
+        if(pts.some(p=>p?.lon==null||p?.lat==null)||coordinates.some(p=>!Number.isFinite(p[0])||!Number.isFinite(p[1])||Math.abs(p[0])>180||Math.abs(p[1])>90))throw new Error("Coordenadas de zona inválidas");
+        const ring=closeRing(coordinates);
+        if(ring.length<4)throw new Error("Coordenadas de zona inválidas");
         return {id:d.id||z.id,name:d.name||z.name||"Zona JET",ring:orientRing(ring,true)};
-      }catch(_){return null}
-    }));
-
-    const valid=details.filter(Boolean);
-    techzoneCount=valid.length;
-    techzoneGeoJSON={
-      type:"FeatureCollection",
-      features:valid.map(z=>({type:"Feature",properties:{id:z.id,name:z.name},geometry:{type:"Polygon",coordinates:[z.ring]}}))
-    };
-    await jetTurfReady;
-    techzoneMask=buildTechzoneMask(valid.map(z=>z.ring));
-    allowedGeometry=techzoneMask?{type:"MultiPolygon",coordinates:techzoneMask.geometry.coordinates.slice(1).map(r=>[orientRing(r,true)])}:null;
-    tuneBaseMap(document.body.classList.contains("dark"));
-    renderTechzones();
-  }catch(e){
-    console.warn("Não foi possível carregar as Techzones da JET:",e);
-  }
+      }));
+      clearTimeout(timeout);
+      const nextGeoJSON={type:"FeatureCollection",features:valid.map(z=>({type:"Feature",properties:{id:z.id,name:z.name},geometry:{type:"Polygon",coordinates:[z.ring]}}))};
+      // Na primeira abertura, exibe as linhas enquanto a máscara é calculada.
+      if(!techzonesUpdatedAt){techzoneGeoJSON=nextGeoJSON;techzoneCount=valid.length;renderTechzones();}
+      await waitForTurf();
+      const nextMask=buildTechzoneMask(valid.map(z=>z.ring));
+      if(!nextMask)throw new Error("Não foi possível calcular a área fora de circulação");
+      const nextAllowed={type:"MultiPolygon",coordinates:nextMask.geometry.coordinates.slice(1).map(r=>[orientRing(r,true)])};
+      // Substitui as delimitações somente após receber e validar o conjunto completo.
+      techzoneGeoJSON=nextGeoJSON;techzoneMask=nextMask;allowedGeometry=nextAllowed;techzoneCount=valid.length;
+      techzonesUpdatedAt=Date.now();techzonesUsingCache=false;techzoneRetryMs=15000;
+      const data={geoJSON:techzoneGeoJSON,mask:techzoneMask,allowedGeometry,count:techzoneCount};
+      saveSnapshot("techzones",data,techzonesUpdatedAt);
+      try{localStorage.setItem(TECHZONE_CACHE_KEY,JSON.stringify({data,updatedAt:techzonesUpdatedAt}));}catch(_){}
+      if(mapStyleReady){tuneBaseMap(document.body.classList.contains("dark"));renderTechzones();}
+      scheduleTechzoneRefresh(TECHZONE_REFRESH_MS);return true;
+    }catch(e){
+      controller.abort();
+      console.warn("Delimitações preservadas; uma nova consulta será tentada:",e);
+      renderTechzones(false);scheduleTechzoneRefresh(techzoneRetryMs);techzoneRetryMs=Math.min(techzoneRetryMs*2,120000);return false;
+    }
+  })().finally(()=>{clearTimeout(timeout);techzoneRequest=null;});
+  return techzoneRequest;
+}
+function repairTechzoneLayers(){
+  if(!map||!mapStyleReady||!techzoneCount)return;
+  if(!map.getSource("jet-techzones")||!map.getLayer("jet-zone-line")||(techzoneMask&&(!map.getSource("jet-outside-mask")||!map.getLayer("jet-outside-mask"))))renderTechzones();
 }
 
 function applyMapTheme(dark){
@@ -410,7 +467,7 @@ function initMap(){
     tuneBaseMap(document.body.classList.contains("dark"));
     render();
     requestLocation(false);
-    loadTechzones();
+    repairTechzoneLayers();
   });
   map.on("style.load",()=>{
     mapStyleReady=true;
@@ -421,6 +478,8 @@ function initMap(){
     renderScooters();
     render();
   });
+  map.on("idle",repairTechzoneLayers);
+  map.on("webglcontextrestored",()=>{renderTechzones();renderScooters();render();});
   map.on("click",handleMapClick);
   parkingHitLayers.forEach(id=>{
     map.on("mouseenter",id,()=>{map.getCanvas().style.cursor="pointer"});
@@ -774,13 +833,16 @@ function refreshActiveBikes(){
   if(needed&&Date.now()-bikesUpdatedAt>=BIKE_REFRESH_MS)loadBikes(true);
 }
 function resumeMonitor(){
-  if(document.hidden||navigator.onLine===false){clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;return;}
+  if(document.hidden||navigator.onLine===false){clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;clearTimeout(techzoneTimer);techzoneTimer=null;return;}
   parkingRetryMs=PARKING_REFRESH_MS;
-  load();refreshActiveBikes();
+  load();refreshActiveBikes();renderTechzones(false);
+  if(!techzoneMask||Date.now()-techzonesUpdatedAt>=TECHZONE_REFRESH_MS)loadTechzones();
+  else scheduleTechzoneRefresh(TECHZONE_REFRESH_MS-(Date.now()-techzonesUpdatedAt));
 }
 document.addEventListener("visibilitychange",resumeMonitor);
 window.addEventListener("online",resumeMonitor);
-window.addEventListener("offline",()=>{clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;});
+window.addEventListener("pageshow",resumeMonitor);
+window.addEventListener("offline",()=>{clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;clearTimeout(techzoneTimer);techzoneTimer=null;});
 
 function bikeFeatures(bikes){
   return {type:"FeatureCollection",features:bikes.flatMap(x=>{
@@ -956,7 +1018,7 @@ function updateOperationalUI(points){
 }
 
 initMap();
-document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible||document.getElementById("parkingBikesDialog").open)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Todos":v==="monitor"?"🟡 Monitor":v==="driver"?"🚚 Motorista":"🔴 Zerados";render();};document.getElementById("q").oninput=render;restoreSnapshots();load();loadBikes(true);setInterval(()=>{if(!document.hidden&&navigator.onLine!==false)refreshActiveBikes();},15000);setInterval(loadTechzones,600000);
+document.getElementById("r").onclick=()=>{load();loadTechzones();if(scootersVisible||document.getElementById("parkingBikesDialog").open)loadBikes(true)};document.getElementById("f").onchange=()=>{const v=document.getElementById("f").value;filterMenu.querySelectorAll("button[data-filter]").forEach(b=>b.classList.toggle("active",b.dataset.filter===v));filterBtn.textContent=v==="all"?"⚙️ Todos":v==="monitor"?"🟡 Monitor":v==="driver"?"🚚 Motorista":"🔴 Zerados";render();};document.getElementById("q").oninput=render;restoreSnapshots();restoreTechzoneSnapshot();load();loadBikes(true);loadTechzones();setInterval(()=>{if(!document.hidden&&navigator.onLine!==false)refreshActiveBikes();},15000);
 </script>
 <script>
 const scooterBtn=document.getElementById("scooterBtn");

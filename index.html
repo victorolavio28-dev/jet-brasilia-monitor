@@ -175,6 +175,22 @@ function baseMapStyle(){
   // Um único estilo mantém as fontes, camadas, filtros e câmera nos dois temas.
   return "https://tiles.openfreemap.org/styles/liberty";
 }
+function colorInsideZone(color,outside,geometry){
+  if(!geometry)return color;
+  // Mantém zoom como entrada da expressão principal e colore cada resultado.
+  // Colocar uma interpolação dentro de "case" pode invalidar a cor no MapLibre.
+  if(Array.isArray(color)&&["interpolate","interpolate-hcl","interpolate-lab","step"].includes(color[0])){
+    const result=color.slice();
+    if(color[0]==="step"){
+      result[2]=colorInsideZone(result[2],outside,geometry);
+      for(let i=4;i<result.length;i+=2)result[i]=colorInsideZone(result[i],outside,geometry);
+    }else{
+      for(let i=4;i<result.length;i+=2)result[i]=colorInsideZone(result[i],outside,geometry);
+    }
+    return result;
+  }
+  return ["case",["within",geometry],["to-color",color],["to-color",outside]];
+}
 function tuneBaseMap(dark=false){
   if(!map)return;
   const style=map.getStyle();if(!style||!Array.isArray(style.layers))return;
@@ -191,11 +207,12 @@ function tuneBaseMap(dark=false){
     try{
       if(layer.type==="background")set("background-color",dark?"#0b1118":paint["background-color"]??null);
       if(layer.type==="fill"){
-        let color=paint["fill-color"]??null;
-        if(dark)color=water?"#123c55":green?"#173c2c":/building/.test(id+source)?"#253240":"#151f2a";
-        if(allowedGeometry&&color!==null)color=["case",["within",allowedGeometry],color,dark?"#343a40":"#e1e4e7"];
+        const patterned=paint["fill-pattern"]!==undefined;
+        let color=paint["fill-color"]??(patterned?"rgba(0,0,0,0)":water?"rgb(158,189,255)":green?"#d8e8c8":"#eef0ed");
+        if(dark&&!patterned)color=water?"#123c55":green?"#173c2c":/building/.test(id+source)?"#253240":"#151f2a";
+        if(allowedGeometry&&!patterned)color=colorInsideZone(color,dark?"#343a40":"#e1e4e7",allowedGeometry);
         set("fill-color",color);
-        set("fill-outline-color",dark?"#2b3947":paint["fill-outline-color"]??null);
+        set("fill-outline-color",dark&&!patterned?"#2b3947":paint["fill-outline-color"]??null);
       }
       if(layer.type==="fill-extrusion"){
         set("fill-extrusion-color",dark?"#253240":paint["fill-extrusion-color"]??null);

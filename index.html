@@ -98,7 +98,7 @@ button:focus-visible,a:focus-visible,.jet-marker:focus-visible{outline:3px solid
 .map-topbar .scooter-toggle{grid-column:auto}
 .operations-strip{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:3px 10px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:12px;box-shadow:0 2px 8px #0001}
 .operations-strip strong{font-size:12px}.operations-strip small{font-size:10px;color:var(--muted)}.operations-strip small.fetch-error{color:#d92d20;font-weight:800}
-.map-legend{position:absolute;bottom:calc(34px + env(safe-area-inset-bottom));left:9px;z-index:6;max-width:210px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;box-shadow:0 2px 12px #0002;font-size:11px;padding:8px 10px}.map-legend summary{font-weight:800;cursor:pointer;min-height:22px}.legend-grid{display:grid;gap:4px;padding-top:4px}.legend-grid span{display:flex;align-items:center;gap:6px}.legend-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}.legend-grid small{color:var(--muted);max-width:170px}
+.map-legend{position:absolute;bottom:calc(34px + env(safe-area-inset-bottom));left:9px;z-index:6;max-width:210px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:10px;box-shadow:0 2px 12px #0002;font-size:11px;padding:8px 10px}body.info-open .map-legend{display:none}.map-legend summary{font-weight:800;cursor:pointer;min-height:22px}.legend-grid{display:grid;gap:4px;padding-top:4px}.legend-grid span{display:flex;align-items:center;gap:6px}.legend-dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}.legend-grid small{color:var(--muted);max-width:170px}
 .move-badge{top:-12px;right:-16px;min-width:22px}.move-badge.action-label{display:none;font-size:9px;padding:0 5px;white-space:nowrap;right:auto;left:50%;transform:translateX(-50%);top:28px;height:18px;line-height:14px;background:#172033}.map-detail .move-badge.action-label{display:block}.map-detail .move-badge.compact-label{display:none}
 .popup-action{padding:10px;border-radius:9px;background:#e8f1ff;color:#143d6b;margin:8px 0;font-size:16px;font-weight:900}.popup-action small{display:block;font-size:11px;font-weight:500;margin-top:3px}.jet-marker.selected-point{outline:3px solid #172e48;outline-offset:3px}
 
@@ -170,7 +170,7 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 <header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 15s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option><option value="driver">Motorista</option></select><input id="q" placeholder="Buscar ponto"></div></header>
 <main><div id="map"></div><div class="map-topbar"><div class="search-box"><input type="search" id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Estacionamento ou nº do patinete"><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">🟡 Monitor</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button><button data-filter="driver">🚚 Motorista</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar</button></div><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small></div></div>
 <details class="map-legend"><summary>Como ler o mapa</summary><div class="legend-grid"><span><i class="legend-dot" style="background:#ff3b30"></i>Vazio · abastecer primeiro</span><span><i class="legend-dot" style="background:#ff9500"></i>1 patinete · prioridade</span><span><i class="legend-dot" style="background:#ffc857"></i>Abaixo da meta · levar</span><span><i class="legend-dot" style="background:#21d19a"></i>Meta atingida · verificar excesso</span><span><i class="legend-dot" style="background:#1677ff"></i>Fora do monitor</span><small>Número no círculo = patinetes disponíveis.<br>↑ levar · ↓ retirar. Aproxime para ler a ação.</small></div></details>
-<section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Meta</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 30%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="statusTrackerInfo" style="padding:10px 0 0">Aguardando comparação dos patinetes…</div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
+<section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><div class="sub">Somente monitor zerado · maior tempo primeiro.<br>Tempo observado neste dispositivo; reinicia após mais de 1 min sem consulta.</div><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Tempo zerado</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 20%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="statusTrackerInfo" style="padding:10px 0 0">Aguardando comparação dos patinetes…</div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
 <dialog id="parkingBikesDialog" class="parking-bikes-dialog" aria-labelledby="parkingBikesTitle">
 <div class="parking-bikes-header"><div><h2 id="parkingBikesTitle">Patinetes do estacionamento</h2><p id="parkingBikesName"></p></div><button type="button" id="parkingBikesClose" class="parking-bikes-close" aria-label="Fechar lista">×</button></div>
 <div id="parkingBikesContent" class="parking-bikes-content" aria-live="polite"></div></dialog>
@@ -581,6 +581,54 @@ function isMonitor(x){
   return v===true || v===1 || v==="1" || String(v).toLowerCase()==="true";
 }
 
+// Histórico de observações completas, sem usar data de atualização como início do vazio.
+const EMPTY_PARKING_KEY="jetEmptyParkingHistoryV1";
+let emptyParkingHistory={};
+try{
+  const saved=JSON.parse(localStorage.getItem(EMPTY_PARKING_KEY)||"{}");
+  if(saved&&typeof saved==="object"&&!Array.isArray(saved)){
+    for(const [id,entry] of Object.entries(saved)){
+      if(entry&&Number.isFinite(entry.since)&&Number.isFinite(entry.lastSeen)&&entry.since<=entry.lastSeen&&entry.lastSeen<=Date.now())emptyParkingHistory[id]=entry;
+    }
+  }
+}catch(_){}
+function updateEmptyParkingHistory(){
+  if(parkingUsingCache||!parkingsUpdatedAt)return;
+  const now=observedBikeStates?bikesUpdatedAt:parkingsUpdatedAt;
+  if(!Number.isFinite(now)||now<=0)return;
+  const present=new Set();
+  for(const parking of P){
+    if(parking.id==null)continue;
+    const id=String(parking.id);present.add(id);
+    const count=Number(parking.bikes_count);
+    if(!isMonitor(parking)||parking.bikes_count==null||!Number.isFinite(count)||count!==0){delete emptyParkingHistory[id];continue;}
+    const previous=emptyParkingHistory[id];
+    if(previous&&now<=previous.lastSeen)continue;
+    emptyParkingHistory[id]={since:previous&&now-previous.lastSeen<=60000?previous.since:now,lastSeen:now};
+  }
+  for(const id of Object.keys(emptyParkingHistory))if(!present.has(id))delete emptyParkingHistory[id];
+  try{localStorage.setItem(EMPTY_PARKING_KEY,JSON.stringify(emptyParkingHistory));}catch(_){}
+}
+function emptyParkingDuration(parking,now=Date.now()){
+  const entry=emptyParkingHistory[String(parking.id)];
+  if(!entry)return "Aguardando consulta";
+  // Pausa o relógio quando os dados deixam de ser recentes.
+  const elapsed=Math.max(0,(now-entry.lastSeen>60000?entry.lastSeen:now)-entry.since);
+  const minutes=Math.floor(elapsed/60000),days=Math.floor(minutes/1440),hours=Math.floor(minutes%1440/60),mins=minutes%60;
+  const label=days?`${days}d ${hours}h ${mins}min`:hours?`${hours}h ${mins}min`:minutes?`${minutes}min`:"< 1min";
+  return label+(now-entry.lastSeen>60000?" · sem atualização":"");
+}
+function renderAttentionPoints(){
+  const a=P.filter(x=>isMonitor(x)&&x.bikes_count!=null&&Number(x.bikes_count)===0)
+    .sort((a,b)=>(emptyParkingHistory[String(a.id)]?.since??Infinity)-(emptyParkingHistory[String(b.id)]?.since??Infinity)||String(a.name||"").localeCompare(String(b.name||""),"pt-BR",{numeric:true}));
+  const now=Date.now();
+  document.getElementById("att").innerHTML=a.map(x=>{
+    const [st,cl]=stat(x);
+    return `<tr><td>${escapeHtml(x.name)}</td><td>0</td><td>${emptyParkingDuration(x,now)}</td><td class="${cl}">${st}</td></tr>`;
+  }).join("")||'<tr><td colspan="4">Nenhum estacionamento do monitor zerado.</td></tr>';
+}
+setInterval(()=>{if(!document.hidden&&document.getElementById("infoPanel").classList.contains("open"))renderAttentionPoints();},15000);
+
 function stat(x){
   const n=+x.bikes_count||0,t=+x.target_bikes_count||0;
   // Fora do monitor é sempre azul, independentemente da quantidade.
@@ -759,15 +807,9 @@ function render(){
   }
   renderParkingLayers(drawPoints);
 
-  let a=P.filter(x=>isMonitor(x)&&((+x.bikes_count||0)==0||((+x.target_bikes_count||0)>0&&(+x.bikes_count||0)<(+x.target_bikes_count||0))))
-    .sort((a,b)=>(+a.bikes_count||0)-(+b.bikes_count||0)).slice(0,100);
+  renderAttentionPoints();
 
-  document.getElementById("att").innerHTML=a.map(x=>{
-    let [st,cl]=stat(x);
-    return `<tr><td>${x.name}</td><td>${x.bikes_count||0}</td><td>${x.target_bikes_count??"—"}</td><td class="${cl}">${st}</td></tr>`
-  }).join("");
-
-  let l=S.filter(x=>(+x.battery_percent)<.3).sort((a,b)=>a.battery_percent-b.battery_percent).slice(0,100);
+  let l=S.filter(x=>{const v=parkingBikeBattery(x);return v!==null&&v<.2;}).sort((a,b)=>a.battery_percent-b.battery_percent).slice(0,100);
   document.getElementById("lb").innerHTML=l.map(x=>
     `<tr><td>${x.identifier||x.name}</td><td class="bad">${Math.round(x.battery_percent*100)}%</td><td>${x.business_status||"—"}</td></tr>`
   ).join("")||"<tr><td colspan=3>Nenhum registro.</td></tr>";
@@ -955,6 +997,7 @@ function observeBikeChanges(bikes,requestStartedAt){
   }
   compareParkingCounts("bikes",requestStartedAt);
   applyAvailableParkingCounts();
+  updateEmptyParkingHistory();
   saveStatusDiagnostics();
   if(affected.size){
     affected.forEach(id=>affectedParkingIds.add(id));
@@ -994,7 +1037,7 @@ function load(){
       updateFreshness();
       updateParkingStats();
       saveSnapshot("parkings",next,parkingsUpdatedAt);
-      applyAvailableParkingCounts();updateParkingStats();updateFreshness();
+      applyAvailableParkingCounts();updateEmptyParkingHistory();updateParkingStats();updateFreshness();
       compareParkingCounts("parkings",requestStartedAt);
       render();refreshParkingPopup();
       document.getElementById("s").textContent="Mapa carregado — contagem de disponíveis atualizada a cada consulta completa dos patinetes.";
@@ -1257,7 +1300,7 @@ themeBtn.onclick=()=>{
   applyMapTheme(dark);
 };
 if(localStorage.getItem("jetTheme")==="dark"){document.body.classList.add("dark");themeBtn.textContent="☀️ Claro"}else themeBtn.textContent="🌙 Dark";
-infoBtn.onclick=()=>{infoPanel.classList.toggle("open"); if(infoPanel.classList.contains("open")){loadBikes(); infoPanel.scrollIntoView({behavior:"smooth"});}};
+infoBtn.onclick=()=>{infoPanel.classList.toggle("open"); document.body.classList.toggle("info-open",infoPanel.classList.contains("open")); if(infoPanel.classList.contains("open")){loadBikes(); infoPanel.scrollIntoView({behavior:"smooth"});}};
 const normalizeSearch=value=>String(value||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 let searchHits=[];
 function clearSearchSelection(){

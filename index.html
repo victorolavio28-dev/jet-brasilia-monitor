@@ -703,16 +703,17 @@ function renderParkingLayers(points){
     "circle-radius":19,"circle-color":"#1677ff","circle-opacity":.2,"circle-stroke-width":3,"circle-stroke-color":"#1677ff",
     "circle-pitch-alignment":"viewport","circle-pitch-scale":"viewport"}});
   add({id:"jet-parking-points",type:"circle",source:"jet-parkings",paint:{
-    "circle-radius":typeof innerWidth==="number"&&innerWidth<=800?10.5:11.5,"circle-color":["get","color"],"circle-stroke-width":2,"circle-stroke-color":"#ffffff",
+    "circle-radius":["interpolate",["linear"],["zoom"],10,4,12,6,14.5,typeof innerWidth==="number"&&innerWidth<=800?10.5:11.5],"circle-color":["get","color"],"circle-stroke-width":2,"circle-stroke-color":"#ffffff",
     "circle-pitch-alignment":"viewport","circle-pitch-scale":"viewport"}});
   const iconLayout={"icon-allow-overlap":true,"icon-ignore-placement":true,
     "icon-pitch-alignment":"viewport","icon-rotation-alignment":"viewport"};
-  add({id:"jet-parking-counts",type:"symbol",source:"jet-parkings",layout:{...iconLayout,"icon-image":["get","countIcon"]}});
+  // Visão geral sem números; contagens e ações aparecem ao aproximar.
+  add({id:"jet-parking-counts",type:"symbol",source:"jet-parkings",minzoom:13,layout:{...iconLayout,"icon-image":["get","countIcon"]}});
   const mobile=typeof innerWidth==="number"&&innerWidth<=800;
   for(const detailed of [false,true]){
     const key=detailed?"detail":"compact";
     add({id:`jet-parking-actions-${detailed?"detail":"compact"}`,type:"symbol",source:"jet-parkings",
-      ...(detailed?{minzoom:14.5}:{maxzoom:14.5}),filter:["!=",["get",key],""],
+      ...(detailed?{minzoom:14.5}:{minzoom:13,maxzoom:14.5}),filter:["!=",["get",key],""],
       layout:{...iconLayout,"icon-image":["get",key+"Icon"],
         "icon-anchor":detailed?"top":"top-right",
         "icon-offset":detailed?[0,mobile?15.5:14.5]:[mobile?28.5:29.5,mobile?-24.5:-25.5]}});

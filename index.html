@@ -482,6 +482,26 @@ function applyMapTheme(dark){
 }
 
 
+function setupMapInteractionOpacity(){
+  let restoreTimer=null;
+  const pointers=new Set();
+  const dim=()=>{clearTimeout(restoreTimer);document.body.classList.add("map-interacting");};
+  const restore=()=>{
+    clearTimeout(restoreTimer);
+    if(pointers.size||map.isMoving())return;
+    restoreTimer=setTimeout(()=>document.body.classList.remove("map-interacting"),650);
+  };
+  map.getCanvas().addEventListener("pointerdown",event=>{pointers.add(event.pointerId);dim();},{passive:true});
+  const release=event=>{if(pointers.delete(event.pointerId))restore();};
+  window.addEventListener("pointerup",release,{passive:true});
+  window.addEventListener("pointercancel",release,{passive:true});
+  map.on("movestart",dim);
+  map.on("moveend",restore);
+  const reset=()=>{pointers.clear();clearTimeout(restoreTimer);document.body.classList.remove("map-interacting");};
+  window.addEventListener("blur",reset);
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)reset();});
+}
+
 function initMap(){
   map=new maplibregl.Map({
     container:"map",
@@ -496,6 +516,8 @@ function initMap(){
   });
   map.addControl(new maplibregl.NavigationControl({showCompass:true,showZoom:true,visualizePitch:true}),"bottom-right");
   map.addControl(new maplibregl.AttributionControl({compact:true}),"bottom-left");
+
+  setupMapInteractionOpacity();
 
   // Botões rápidos de rotação.
   const rot=document.createElement("div");
@@ -1420,6 +1442,16 @@ document.addEventListener("click",e=>{if(!e.target.closest(".search-box")) searc
 #qrDialog::backdrop{background:#0008}#qrDialog header{display:flex;justify-content:space-between;align-items:center;padding:0;background:transparent;position:static;color:inherit}#qrDialog h2{margin:0;font-size:18px}#qrDialog button{background:#edf5ff;color:#155aa7;border:1px solid #b8d5fa;cursor:pointer;min-height:40px}#qrDialog button:disabled{opacity:.5;cursor:wait}#qrDialog button:focus-visible{outline:3px solid #1677ff;outline-offset:2px}#qrDialog .qr-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}#qrDialog label{display:block;margin:12px 0 6px}#qrDialog textarea{box-sizing:border-box;width:100%;min-height:90px;padding:10px;border:1px solid #aab6c4;border-radius:9px;font:16px system-ui;background:#fff;color:#172033}#qrStatus{line-height:1.5}#qrVideo{width:100%;max-height:260px;object-fit:contain;background:#111;border-radius:10px}#qrResults{border-top:1px solid #cad2dc;margin-top:12px}#qrResults .qr-result{display:block;box-sizing:border-box;width:100%;margin:7px 0;padding:9px;text-align:left;border-radius:8px;font-size:13px}#qrClose{font-size:22px;padding:0 12px}.qr-map-marker{background:#ffdf50!important;color:#172033!important;border:2px solid #fff!important;border-radius:9px!important;padding:4px 6px!important;font:bold 12px system-ui!important;box-shadow:0 2px 8px #0006;cursor:pointer;z-index:5!important}.location-marker.maplibregl-marker{z-index:10!important}
 body.dark #qrDialog{background:#111923;color:#e5edf6;border-color:#344354}body.dark #qrDialog textarea{background:#1b2634;color:#fff;border-color:#536478}body.dark #qrDialog button,body.dark #qrOpen{background:#173658;color:#dcecff;border-color:#42658b}
 </style>
+<style id="map-interaction-and-qr-style">
+/* Os controles cedem espaço visual durante os gestos no mapa. */
+.map-topbar,.rotate-tools,.location-tools,.map-legend,.maplibregl-ctrl-group{transition:opacity .18s ease}
+body.map-interacting :is(.map-topbar,.rotate-tools,.location-tools,.map-legend,.maplibregl-ctrl-group){opacity:.35}
+body.map-interacting :is(.map-topbar,.rotate-tools,.location-tools,.map-legend,.maplibregl-ctrl-group):is(:hover,:focus-within){opacity:1}
+@media(prefers-reduced-motion:reduce){.map-topbar,.rotate-tools,.location-tools,.map-legend,.maplibregl-ctrl-group{transition:none}}
+.qr-map-marker{width:22px!important;height:22px!important;min-height:0!important;padding:0!important;border:2px solid #fff!important;border-radius:50%!important;background:#1677ff!important;color:#fff!important;box-shadow:0 1px 6px #0005;overflow:visible!important;cursor:pointer;z-index:5!important}
+.qr-map-number{position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.96);color:#1257a6;font:bold 12px/16px system-ui;white-space:nowrap;box-shadow:0 1px 5px #0003}
+body.dark .qr-map-number{background:rgba(17,25,35,.96);color:#b8d9ff}
+</style>
 <dialog id="qrDialog" aria-labelledby="qrTitle"><header><h2 id="qrTitle">Localizar lista por QR</h2><button id="qrClose" type="button" aria-label="Fechar">×</button></header><p>Localize vários patinetes e destaque seus números no mapa.</p><div class="qr-actions"><button type="button" id="qrCamera">📷 Câmera</button><button type="button" onclick="document.getElementById('qrImage').click()">▦ Importar imagem</button><button type="button" id="qrStop" hidden>Desligar câmera</button></div><input id="qrImage" type="file" accept="image/*" hidden><video id="qrVideo" playsinline muted hidden></video><label for="qrText">Ou cole a lista de números</label><textarea id="qrText" placeholder="273551&#10;273591&#10;297595" spellcheck="false"></textarea><div class="qr-actions"><button type="button" id="qrLocate">Localizar / atualizar</button><button type="button" id="qrView">Ver no mapa</button><button type="button" id="qrClear">Limpar lista</button></div><p id="qrStatus" role="status" aria-live="polite"></p><div id="qrResults" aria-live="polite"></div></dialog>
 <script>
 // Localização em lote por QR; mantém a busca e os filtros existentes.
@@ -1457,11 +1489,12 @@ function refreshQrSelection(fit=false){
     qrResults.appendChild(row);
     if(!item.feature||!map)continue;
     const feature=item.feature;
-    const el=document.createElement('button');el.type='button';el.className='qr-map-marker';el.textContent=item.number;
+    const el=document.createElement('button');el.type='button';el.className='qr-map-marker';
+    const label=document.createElement('span');label.className='qr-map-number';label.textContent=item.number;el.appendChild(label);
     el.title='Localizar S.'+item.number;el.setAttribute('aria-label',el.title);
     const open=()=>{qrClose();selectSearchHit({kind:'bike',id:String(feature.properties.id),name:feature.properties.identifier,item:feature});};
     row.onclick=open;el.onclick=e=>{e.stopPropagation();open();};
-    qrMarkers.push(new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat(feature.geometry.coordinates).addTo(map));
+    qrMarkers.push(new maplibregl.Marker({element:el,anchor:'center'}).setLngLat(feature.geometry.coordinates).addTo(map));
   }
   if(fit&&found.length&&map){
     const bounds=new maplibregl.LngLatBounds();found.forEach(x=>bounds.extend(x.feature.geometry.coordinates));

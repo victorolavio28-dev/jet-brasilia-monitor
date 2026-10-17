@@ -198,6 +198,7 @@ try{
 let parkingRequest=null, parkingRefreshTimer=null, parkingRetryMs=PARKING_REFRESH_MS;
 const C="6787b812c168def1b2c6d143",B="https://logistic.gojet.app/api/v0/urent";
 let searchSelection=null, searchBikeMarker=null, searchRevision=0;
+let qrLayoutFrame=null,qrFoundItems=[];
 let scootersVisible=false, bikesRequest=null, scooterPopup=null, bikesUpdatedAt=0;
 const scooterSourceVersions=new WeakMap();
 let scooterData={type:"FeatureCollection",features:[]};
@@ -256,6 +257,7 @@ function tuneBaseMap(dark=false){
       if(layer.type==="fill"){
         const patterned=paint["fill-pattern"]!==undefined;
         let color=paint["fill-color"]??(patterned?"rgba(0,0,0,0)":water?"rgb(158,189,255)":green?"#d8e8c8":"#eef0ed");
+        if(!dark&&!patterned){if(water)color="#9ecbff";else if(green)color="#d8e8c8";}
         if(dark&&!patterned)color=water?"#123c55":green?"#173c2c":/building/.test(id+source)?"#253240":"#151f2a";
         if(allowedGeometry&&!patterned)color=colorInsideZone(color,dark?"#343a40":"#e1e4e7",allowedGeometry);
         set("fill-color",color);
@@ -381,7 +383,7 @@ function renderTechzones(updateData=true){
 
 function validTechzoneSnapshot(saved){
   const data=saved?.data;
-  return Number.isFinite(saved?.updatedAt)&&Date.now()-saved.updatedAt<86400000&&
+  return Number.isFinite(saved?.updatedAt)&&saved.updatedAt>0&&saved.updatedAt<=Date.now()+60000&&
     data?.geoJSON?.type==="FeatureCollection"&&Array.isArray(data.geoJSON.features)&&data.geoJSON.features.length>0&&
     data.geoJSON.features.every(f=>f.geometry?.type==="Polygon"&&Array.isArray(f.geometry.coordinates?.[0])&&f.geometry.coordinates[0].length>=4)&&
     data.mask?.geometry?.type==="Polygon"&&Array.isArray(data.mask.geometry.coordinates)&&data.mask.geometry.coordinates.length>1&&
@@ -466,7 +468,11 @@ function loadTechzones(){
 }
 function repairTechzoneLayers(){
   if(!map||!mapStyleReady||!techzoneCount)return;
-  if(!map.getSource("jet-techzones")||!map.getLayer("jet-zone-line")||(techzoneMask&&(!map.getSource("jet-outside-mask")||!map.getLayer("jet-outside-mask"))))renderTechzones();
+  const line=map.getLayer("jet-zone-line"),mask=map.getLayer("jet-outside-mask");
+  if(!map.getSource("jet-techzones")||!line||map.getLayoutProperty("jet-zone-line","visibility")==="none"||
+    (techzoneMask&&(!map.getSource("jet-outside-mask")||!mask||map.getLayoutProperty("jet-outside-mask","visibility")==="none"))){
+    tuneBaseMap(document.body.classList.contains("dark"));renderTechzones();
+  }
 }
 
 function applyMapTheme(dark){
@@ -554,6 +560,7 @@ function initMap(){
     render();
   });
   map.on("idle",repairTechzoneLayers);
+  map.on("moveend",repairTechzoneLayers);
   map.on("webglcontextrestored",()=>{renderTechzones();renderScooters();render();});
   map.on("click",handleMapClick);
   parkingHitLayers.forEach(id=>{
@@ -565,7 +572,9 @@ function initMap(){
   map.on("zoomend",updateMapDetail);
   map.on("zoom",queuePopupSizing);
   map.on("resize",queuePopupSizing);
-  map.on("move",queueQrLayout);
+  map.on("zoom",queueQrLayout);
+  map.on("rotate",queueQrLayout);
+  map.on("pitch",queueQrLayout);
   map.on("resize",queueQrLayout);
   // As camadas acompanham a câmera sem reconstrução dos estacionamentos.
 
@@ -1463,10 +1472,11 @@ body:is(.map-interacting,.map-feature-interacting) :is(.map-topbar,.rotate-tools
 @media(prefers-reduced-motion:reduce){.map-topbar,.rotate-tools,.location-tools,.map-legend,.maplibregl-ctrl-group{transition:none}}
 .qr-map-marker{width:28px!important;height:28px!important;min-height:0!important;padding:0!important;border:2px solid #fff!important;border-radius:50%!important;background:#1677ff!important;color:#fff!important;box-shadow:0 1px 6px #0005;overflow:visible!important;cursor:pointer;z-index:5!important;display:grid;place-items:center}
 .qr-map-icon{font:17px/1 system-ui;pointer-events:none}
-.qr-map-leader{position:absolute;left:50%;top:50%;height:1px;background:#1677ff;transform-origin:0 50%;pointer-events:none;z-index:-1;display:none}
+.qr-map-cluster{width:34px!important;height:34px!important;box-shadow:0 0 0 4px #1677ff30,0 2px 6px #0004}
+.qr-map-cluster .qr-map-icon{font:800 14px/1 system-ui!important}
 .qr-map-number{display:none;position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);padding:2px 5px;border-radius:5px;background:rgba(255,255,255,.96);color:#1257a6;font:bold 12px/16px system-ui;white-space:nowrap;box-shadow:0 1px 5px #0003;pointer-events:none}
 #map.qr-show-numbers .qr-map-number{display:block}
-#map:not(.qr-show-numbers) .qr-map-marker{width:24px!important;height:24px!important}
+#map:not(.qr-show-numbers) .qr-map-marker:not(.qr-map-cluster){width:24px!important;height:24px!important}
 #map:not(.qr-show-numbers) .qr-map-icon{font-size:14px}
 
 body.dark .qr-map-number{background:rgba(17,25,35,.96);color:#b8d9ff}
@@ -1475,7 +1485,7 @@ body.dark .qr-map-number{background:rgba(17,25,35,.96);color:#b8d9ff}
 <script>
 // Localização em lote por QR; mantém a busca e os filtros existentes.
 const qrDialog=document.getElementById('qrDialog'),qrText=document.getElementById('qrText'),qrStatus=document.getElementById('qrStatus'),qrResults=document.getElementById('qrResults'),qrVideo=document.getElementById('qrVideo');
-let qrNumbers=[],qrMarkers=[],qrStream=null,qrSession=0,qrDecoderPromise=null,qrBusy=false,qrListRevision=0,qrPreviousFilter=null,qrLayoutFrame=null;
+let qrNumbers=[],qrMarkers=[],qrStream=null,qrSession=0,qrDecoderPromise=null,qrBusy=false,qrListRevision=0,qrPreviousFilter=null;
 function parseQrNumbers(value){
   return [...new Set(Array.from(String(value).matchAll(/(?:^|[^\d])(?:S\.)?(\d{3})-?(\d{3})(?!\d)/gi),m=>m[1]+m[2]))].slice(0,1000);
 }
@@ -1492,50 +1502,78 @@ function stopQrCamera(){
   document.getElementById('qrStop').hidden=true;
 }
 function qrClose(){stopQrCamera();qrDialog.close();}
-// Desloca apenas a apresentação; coordenadas e rotas continuam sendo as reais.
+// Grupos existem apenas na apresentação distante; patinetes individuais usam o GPS real.
 function queueQrLayout(){
-  if(qrLayoutFrame!==null||!qrMarkers.length)return;
-  qrLayoutFrame=requestAnimationFrame(()=>{qrLayoutFrame=null;layoutQrMarkers();});
+  if(qrLayoutFrame!==null||!qrFoundItems.length)return;
+  qrLayoutFrame=requestAnimationFrame(()=>{
+    qrLayoutFrame=null;
+    try{layoutQrMarkers();}catch(error){console.warn('Falha ao atualizar os grupos QR',error);}
+  });
 }
-function qrMarkerOffsets(points,showNumbers){
-  const width=showNumbers?76:32,height=showNumbers?54:32,cells=new Map();
-  const key=(x,y)=>x+','+y;
-  const free=(x,y)=>{
-    const cx=Math.floor(x/width),cy=Math.floor(y/height);
-    for(let a=cx-1;a<=cx+1;a++)for(let b=cy-1;b<=cy+1;b++){
-      for(const p of cells.get(key(a,b))||[])if(Math.abs(p.x-x)<width&&Math.abs(p.y-y)<height)return false;
-    }
-    return true;
-  };
-  return points.map(point=>{
-    let dx=0,dy=0,placed=free(point.x,point.y);
-    for(let ring=1;!placed;ring++){
-      for(let row=-ring;row<=ring&&!placed;row++)for(let col=-ring;col<=ring;col++){
-        if(Math.max(Math.abs(col),Math.abs(row))!==ring)continue;
-        if(free(point.x+col*width,point.y+row*height)){dx=col*width;dy=row*height;placed=true;break;}
+function groupQrItems(items,project,zoom){
+  if(zoom>=17)return items.map(item=>[item]);
+  const radius=40,cells=new Map(),groups=[];
+  const ordered=items.slice().sort((a,b)=>a.number.localeCompare(b.number));
+  for(const item of ordered){
+    const point=project(item.feature.geometry.coordinates);
+    if(!Number.isFinite(point.x)||!Number.isFinite(point.y))continue;
+    const cx=Math.floor(point.x/radius),cy=Math.floor(point.y/radius);
+    let chosen=null,distance=radius*radius;
+    for(let x=cx-1;x<=cx+1;x++)for(let y=cy-1;y<=cy+1;y++){
+      for(const group of cells.get(x+','+y)||[]){
+        const d=(group.x-point.x)**2+(group.y-point.y)**2;
+        if(d<=distance){chosen=group;distance=d;}
       }
     }
-    const x=point.x+dx,y=point.y+dy,k=key(Math.floor(x/width),Math.floor(y/height));
-    if(!cells.has(k))cells.set(k,[]);cells.get(k).push({x,y});
-    return [dx,dy];
-  });
+    if(chosen)chosen.items.push(item);
+    else{
+      const group={x:point.x,y:point.y,items:[item]},key=cx+','+cy;
+      groups.push(group);if(!cells.has(key))cells.set(key,[]);cells.get(key).push(group);
+    }
+  }
+  return groups.map(group=>group.items);
+}
+function openQrBike(item){
+  qrClose();const feature=item.feature;
+  selectSearchHit({kind:'bike',id:String(feature.properties.id),name:feature.properties.identifier,item:feature},{qr:true});
 }
 function layoutQrMarkers(){
   if(!map)return;
-  const showNumbers=map.getZoom()>=16;
-  document.getElementById('map').classList.toggle('qr-show-numbers',showNumbers);
-  const ordered=qrMarkers.slice().sort((a,b)=>a.getElement().title.localeCompare(b.getElement().title));
-  const offsets=qrMarkerOffsets(ordered.map(marker=>map.project(marker.getLngLat())),showNumbers);
-  ordered.forEach((marker,index)=>{
-    const [dx,dy]=offsets[index];marker.setOffset([dx,dy]);
-    const leader=marker.getElement().querySelector('.qr-map-leader');
-    leader.style.display=dx||dy?'block':'none';
-    leader.style.width=Math.hypot(dx,dy)+'px';
-    leader.style.transform='rotate('+Math.atan2(-dy,-dx)+'rad)';
-  });
+  const zoom=map.getZoom();
+  document.getElementById('map').classList.toggle('qr-show-numbers',zoom>=14);
+  const previous=new Map(qrMarkers.map(marker=>[marker.qrKey,marker])),next=[];
+  const groups=groupQrItems(qrFoundItems,coordinates=>map.project(coordinates),zoom);
+  for(const items of groups){
+    const key=items.map(item=>item.number).sort().join(',');
+    const coordinates=items.length===1?items[0].feature.geometry.coordinates:
+      [items.reduce((sum,item)=>sum+item.feature.geometry.coordinates[0],0)/items.length,
+       items.reduce((sum,item)=>sum+item.feature.geometry.coordinates[1],0)/items.length];
+    let marker=previous.get(key);
+    if(marker){previous.delete(key);marker.setLngLat(coordinates);next.push(marker);continue;}
+    const el=document.createElement('button');el.type='button';el.className='qr-map-marker';
+    const icon=document.createElement('span');icon.className='qr-map-icon';icon.setAttribute('aria-hidden','true');
+    icon.textContent=items.length>1?String(items.length):'🛴';el.appendChild(icon);
+    if(items.length>1){
+      el.classList.add('qr-map-cluster');el.title=items.length+' patinetes — aproximar';
+      el.onclick=event=>{
+        event.stopPropagation();
+        const bounds=new maplibregl.LngLatBounds();items.forEach(item=>bounds.extend(item.feature.geometry.coordinates));
+        map.fitBounds(bounds,{padding:80,maxZoom:Math.min(19,Math.max(17,zoom+2)),duration:500});
+      };
+    }else{
+      const item=items[0],label=document.createElement('span');
+      label.className='qr-map-number';label.textContent=item.number;el.appendChild(label);
+      el.title='Localizar S.'+item.number;
+      el.onclick=event=>{event.stopPropagation();openQrBike(item);};
+    }
+    el.setAttribute('aria-label',el.title);
+    marker=new maplibregl.Marker({element:el,anchor:'center'}).setLngLat(coordinates).addTo(map);
+    marker.qrKey=key;next.push(marker);
+  }
+  previous.forEach(marker=>marker.remove());qrMarkers=next;
 }
 function refreshQrSelection(fit=false){
-  qrMarkers.forEach(marker=>marker.remove());qrMarkers=[];qrResults.replaceChildren();
+  qrMarkers.forEach(marker=>marker.remove());qrMarkers=[];qrFoundItems=[];qrResults.replaceChildren();
   if(!qrNumbers.length){document.getElementById('qrOpen').textContent='▦ QR';return;}
   const matches=qrMatches(qrNumbers,S,scooterData.features);
   const found=matches.filter(x=>x.feature);
@@ -1549,17 +1587,10 @@ function refreshQrSelection(fit=false){
     row.textContent=`${item.number} — ${item.feature?'Ver no mapa':item.exists?'Sem localização disponível':bikesLoaded?'Não encontrado nos dados':'Consulta incompleta; tente atualizar'}`;
     qrResults.appendChild(row);
     if(!item.feature||!map)continue;
-    const feature=item.feature;
-    const el=document.createElement('button');el.type='button';el.className='qr-map-marker';
-    const icon=document.createElement('span');icon.className='qr-map-icon';icon.textContent='🛴';icon.setAttribute('aria-hidden','true');el.appendChild(icon);
-    const leader=document.createElement('span');leader.className='qr-map-leader';leader.setAttribute('aria-hidden','true');el.appendChild(leader);
-    const label=document.createElement('span');label.className='qr-map-number';label.textContent=item.number;el.appendChild(label);
-    el.title='Localizar S.'+item.number;el.setAttribute('aria-label',el.title);
-    const open=()=>{qrClose();selectSearchHit({kind:'bike',id:String(feature.properties.id),name:feature.properties.identifier,item:feature},{qr:true});};
-    row.onclick=open;el.onclick=e=>{e.stopPropagation();open();};
-    qrMarkers.push(new maplibregl.Marker({element:el,anchor:'center'}).setLngLat(feature.geometry.coordinates).addTo(map));
+    row.onclick=()=>openQrBike(item);
+    qrFoundItems.push(item);
   }
-  queueQrLayout();
+  layoutQrMarkers();
   if(fit&&found.length&&map){
     const bounds=new maplibregl.LngLatBounds();found.forEach(x=>bounds.extend(x.feature.geometry.coordinates));
     map.fitBounds(bounds,{padding:{top:165,bottom:65,left:55,right:55},maxZoom:16,duration:700});

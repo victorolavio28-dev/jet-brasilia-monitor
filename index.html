@@ -1369,6 +1369,7 @@ infoBtn.onclick=()=>{infoPanel.classList.toggle("open"); document.body.classList
 const normalizeSearch=value=>String(value||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 let searchHits=[];
 function clearSearchSelection(){
+  ++searchRevision;
   searchSelection=null;
   parkingPopup?.remove();
   if(searchBikeMarker){searchBikeMarker.remove();searchBikeMarker=null;}
@@ -1404,7 +1405,7 @@ async function updateSearchResults(){
     button.append(title,detail);button.onclick=()=>selectSearchHit(hit);searchSuggestions.appendChild(button);
   });searchSuggestions.classList.add("open");return searchHits;
 }
-function selectSearchHit(hit){
+function selectSearchHit(hit,{qr=false}={}){
   clearSearchSelection();searchSelection={kind:hit.kind,id:hit.id};++searchRevision;
   mapSearch.value=hit.name;searchSuggestions.classList.remove("open");mapSearch.blur();
   let coordinates;
@@ -1412,11 +1413,13 @@ function selectSearchHit(hit){
     coordinates=[Number(hit.item.longitude),Number(hit.item.latitude)];render();
   }else{
     coordinates=hit.item.geometry.coordinates;
+    if(!qr){
     const el=document.createElement("div");el.className="searched-scooter";el.textContent="🛴";el.title=hit.name;
     el.dataset.colorStatus=hit.item.properties.colorStatus;
     styleSearchedScooter(el,document.body.classList.contains("dark"));
     searchBikeMarker=new maplibregl.Marker({element:el,anchor:"center",subpixelPositioning:true}).setLngLat(coordinates).addTo(map);
     el.onclick=()=>showScooterPopup({features:[hit.item]},true);
+    }
   }
   const revision=searchRevision;
   const open=()=>{
@@ -1456,7 +1459,7 @@ body.dark .qr-map-number{background:rgba(17,25,35,.96);color:#b8d9ff}
 <script>
 // Localização em lote por QR; mantém a busca e os filtros existentes.
 const qrDialog=document.getElementById('qrDialog'),qrText=document.getElementById('qrText'),qrStatus=document.getElementById('qrStatus'),qrResults=document.getElementById('qrResults'),qrVideo=document.getElementById('qrVideo');
-let qrNumbers=[],qrMarkers=[],qrStream=null,qrSession=0,qrDecoderPromise=null,qrBusy=false;
+let qrNumbers=[],qrMarkers=[],qrStream=null,qrSession=0,qrDecoderPromise=null,qrBusy=false,qrListRevision=0;
 function parseQrNumbers(value){
   return [...new Set(Array.from(String(value).matchAll(/(?:^|[^\d])(?:S\.)?(\d{3})-?(\d{3})(?!\d)/gi),m=>m[1]+m[2]))].slice(0,1000);
 }
@@ -1492,7 +1495,7 @@ function refreshQrSelection(fit=false){
     const el=document.createElement('button');el.type='button';el.className='qr-map-marker';
     const label=document.createElement('span');label.className='qr-map-number';label.textContent=item.number;el.appendChild(label);
     el.title='Localizar S.'+item.number;el.setAttribute('aria-label',el.title);
-    const open=()=>{qrClose();selectSearchHit({kind:'bike',id:String(feature.properties.id),name:feature.properties.identifier,item:feature});};
+    const open=()=>{qrClose();selectSearchHit({kind:'bike',id:String(feature.properties.id),name:feature.properties.identifier,item:feature},{qr:true});};
     row.onclick=open;el.onclick=e=>{e.stopPropagation();open();};
     qrMarkers.push(new maplibregl.Marker({element:el,anchor:'center'}).setLngLat(feature.geometry.coordinates).addTo(map));
   }
@@ -1505,11 +1508,19 @@ async function applyQrList(){
   if(qrBusy)return;
   const numbers=parseQrNumbers(qrText.value);
   if(!numbers.length){qrStatus.textContent='Nenhum número de patinete com seis dígitos encontrado.';return;}
+  const revision=++qrListRevision;
   qrBusy=true;document.getElementById('qrLocate').disabled=true;
   stopQrCamera();qrStatus.textContent='Consultando os patinetes…';
   try{
-    await loadBikes(true);qrNumbers=numbers;refreshQrSelection(true);
-    qrStatus.textContent=bikesFetchFailed?'Não foi possível atualizar. Os resultados usam os dados disponíveis.':'Lista localizada. Feche esta janela para visualizar os destaques.';
+    await loadBikes(true);
+    if(revision!==qrListRevision)return;
+    clearSearchSelection();mapSearch.value='';searchSuggestions.classList.remove('open');
+    qrNumbers=numbers;
+    document.getElementById('f').value='none';document.getElementById('f').onchange();
+    filterMenu.classList.remove('open');
+    scootersVisible=false;updateScooterButton();renderScooters();
+    refreshQrSelection(true);qrClose();
+    qrStatus.textContent=bikesFetchFailed?'Não foi possível atualizar. Os resultados usam os dados disponíveis.':'Lista localizada no mapa.';
   }catch(e){qrStatus.textContent='Não foi possível localizar agora. Tente novamente.';}
   finally{qrBusy=false;document.getElementById('qrLocate').disabled=false;}
 }
@@ -1573,7 +1584,12 @@ document.getElementById('qrClose').onclick=qrClose;
 document.getElementById('qrStop').onclick=()=>{stopQrCamera();qrStatus.textContent='Câmera desligada.';};
 document.getElementById('qrLocate').onclick=applyQrList;
 document.getElementById('qrView').onclick=()=>{refreshQrSelection(true);qrClose();};
-document.getElementById('qrClear').onclick=()=>{qrNumbers=[];qrText.value='';stopQrCamera();refreshQrSelection();qrStatus.textContent='Lista removida do mapa.';};
+document.getElementById('qrClear').onclick=()=>{
+  ++qrListRevision;
+  qrNumbers=[];qrText.value='';stopQrCamera();
+  clearSearchSelection();mapSearch.value='';searchSuggestions.classList.remove('open');
+  refreshQrSelection();qrStatus.textContent='Lista removida do mapa.';
+};
 qrDialog.addEventListener('close',stopQrCamera);
 qrDialog.addEventListener('cancel',stopQrCamera);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopQrCamera();});

@@ -1459,7 +1459,7 @@ body.dark .qr-map-number{background:rgba(17,25,35,.96);color:#b8d9ff}
 <script>
 // Localização em lote por QR; mantém a busca e os filtros existentes.
 const qrDialog=document.getElementById('qrDialog'),qrText=document.getElementById('qrText'),qrStatus=document.getElementById('qrStatus'),qrResults=document.getElementById('qrResults'),qrVideo=document.getElementById('qrVideo');
-let qrNumbers=[],qrMarkers=[],qrStream=null,qrSession=0,qrDecoderPromise=null,qrBusy=false,qrListRevision=0;
+let qrNumbers=[],qrMarkers=[],qrStream=null,qrSession=0,qrDecoderPromise=null,qrBusy=false,qrListRevision=0,qrPreviousFilter=null;
 function parseQrNumbers(value){
   return [...new Set(Array.from(String(value).matchAll(/(?:^|[^\d])(?:S\.)?(\d{3})-?(\d{3})(?!\d)/gi),m=>m[1]+m[2]))].slice(0,1000);
 }
@@ -1515,6 +1515,7 @@ async function applyQrList(){
     await loadBikes(true);
     if(revision!==qrListRevision)return;
     clearSearchSelection();mapSearch.value='';searchSuggestions.classList.remove('open');
+    if(qrPreviousFilter===null)qrPreviousFilter=document.getElementById('f').value;
     qrNumbers=numbers;
     document.getElementById('f').value='none';document.getElementById('f').onchange();
     filterMenu.classList.remove('open');
@@ -1588,7 +1589,12 @@ document.getElementById('qrClear').onclick=()=>{
   ++qrListRevision;
   qrNumbers=[];qrText.value='';stopQrCamera();
   clearSearchSelection();mapSearch.value='';searchSuggestions.classList.remove('open');
-  refreshQrSelection();qrStatus.textContent='Lista removida do mapa.';
+  refreshQrSelection();
+  if(qrPreviousFilter!==null){
+    document.getElementById('f').value=qrPreviousFilter;qrPreviousFilter=null;
+    document.getElementById('f').onchange();
+  }
+  qrStatus.textContent='Lista removida do mapa.';
 };
 qrDialog.addEventListener('close',stopQrCamera);
 qrDialog.addEventListener('cancel',stopQrCamera);

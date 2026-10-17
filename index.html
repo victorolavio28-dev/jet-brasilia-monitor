@@ -174,7 +174,7 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 .cycle-control select option{background:var(--panel,#fff);color:var(--text,#172033)}
 </style></head><body>
 <header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 15s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option><option value="driver">Motorista</option></select><input id="q" placeholder="Buscar ponto"></div></header>
-<main><div id="map"></div><div class="map-topbar"><div class="search-box"><input type="search" id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Estacionamento ou nº do patinete"><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">🟡 Monitor</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button><button data-filter="driver">🚚 Motorista</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar</button></div><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small><label class="cycle-control" title="Alterar ciclo do monitor">Ciclo <select id="cycleSelector" aria-label="Ciclo do monitor"><option value="weekend">Final de semana</option><option value="auto">Automático</option></select></label></div></div>
+<main><div id="map"></div><div class="map-topbar"><div class="search-box"><input type="search" id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Estacionamento ou nº do patinete"><button type="button" id="qrOpen" title="Localizar lista por QR" aria-label="Localizar lista por QR">▦ QR</button><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">🟡 Monitor</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button><button data-filter="driver">🚚 Motorista</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn">☷ Info</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar</button></div><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small><label class="cycle-control" title="Alterar ciclo do monitor">Ciclo <select id="cycleSelector" aria-label="Ciclo do monitor"><option value="weekend">Final de semana</option><option value="auto">Automático</option></select></label></div></div>
 <details class="map-legend"><summary>Como ler o mapa</summary><div class="legend-grid"><span><i class="legend-dot" style="background:#ff3b30"></i>Vazio · abastecer primeiro</span><span><i class="legend-dot" style="background:#ff9500"></i>1 patinete · prioridade</span><span><i class="legend-dot" style="background:#ffc857"></i>Abaixo da meta · levar</span><span><i class="legend-dot" style="background:#21d19a"></i>Meta atingida · verificar excesso</span><span><i class="legend-dot" style="background:#1677ff"></i>Fora do monitor</span><small>Número no círculo = patinetes disponíveis.<br>↑ levar · ↓ retirar. Aproxime para ler a ação.</small></div></details>
 <section id="infoPanel"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><div class="sub">Somente monitor zerado · maior tempo primeiro.<br>Tempo observado neste dispositivo; reinicia após mais de 1 min sem consulta.</div><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Tempo zerado</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 20%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="statusTrackerInfo" style="padding:10px 0 0">Aguardando comparação dos patinetes…</div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></section></main>
 <dialog id="parkingBikesDialog" class="parking-bikes-dialog" aria-labelledby="parkingBikesTitle">
@@ -1202,7 +1202,7 @@ async function loadBikes(force=false){
       document.getElementById("b").textContent=S.length.toLocaleString("pt-BR");
       const v=S.filter(x=>x.battery_percent!=null).map(x=>Number(x.battery_percent)).filter(Number.isFinite);
       document.getElementById("bat").textContent=v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*100)+"%":"—";
-      updateParkingStats();updateFreshness();render();refreshParkingPopup();renderScooters();updateScooterButton();renderParkingBikes();return true;
+      updateParkingStats();updateFreshness();render();refreshParkingPopup();renderScooters();updateScooterButton();renderParkingBikes();if(typeof refreshQrSelection==="function")refreshQrSelection();return true;
     }catch(e){
       bikesFetchFailed=true;bikeRetryMs=Math.min(bikeRetryMs*2,30000);updateFreshness();
       document.getElementById("s").textContent="Erro ao consultar patinetes: "+e.message;
@@ -1407,4 +1407,136 @@ mapSearch.addEventListener("keydown",async e=>{
 
 document.addEventListener("click",e=>{if(!e.target.closest(".search-box")) searchSuggestions.classList.remove("open")});
 </script>
-<script>if("serviceWorker" in navigator && location.protocol!=="file:"){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script></body></html>
+<script>if("serviceWorker" in navigator && location.protocol!=="file:"){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script><style>
+#mapSearch{padding-right:90px!important}#qrOpen{position:absolute;right:5px;top:5px;height:34px!important;padding:4px 9px!important;font-size:12px;z-index:2;background:#edf5ff;color:#155aa7;border-color:#b8d5fa;white-space:nowrap}
+#qrDialog{box-sizing:border-box;width:min(94vw,480px);max-height:85dvh;overflow:auto;border:1px solid #cad2dc;border-radius:16px;padding:18px;background:#fff;color:#172033;font:14px system-ui}
+#qrDialog::backdrop{background:#0008}#qrDialog header{display:flex;justify-content:space-between;align-items:center;padding:0;background:transparent;position:static;color:inherit}#qrDialog h2{margin:0;font-size:18px}#qrDialog button{background:#edf5ff;color:#155aa7;border:1px solid #b8d5fa;cursor:pointer;min-height:40px}#qrDialog button:disabled{opacity:.5;cursor:wait}#qrDialog button:focus-visible{outline:3px solid #1677ff;outline-offset:2px}#qrDialog .qr-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}#qrDialog label{display:block;margin:12px 0 6px}#qrDialog textarea{box-sizing:border-box;width:100%;min-height:90px;padding:10px;border:1px solid #aab6c4;border-radius:9px;font:16px system-ui;background:#fff;color:#172033}#qrStatus{line-height:1.5}#qrVideo{width:100%;max-height:260px;object-fit:contain;background:#111;border-radius:10px}#qrResults{border-top:1px solid #cad2dc;margin-top:12px}#qrResults .qr-result{display:block;box-sizing:border-box;width:100%;margin:7px 0;padding:9px;text-align:left;border-radius:8px;font-size:13px}#qrClose{font-size:22px;padding:0 12px}.qr-map-marker{background:#ffdf50!important;color:#172033!important;border:2px solid #fff!important;border-radius:9px!important;padding:4px 6px!important;font:bold 12px system-ui!important;box-shadow:0 2px 8px #0006;cursor:pointer;z-index:5!important}.location-marker.maplibregl-marker{z-index:10!important}
+body.dark #qrDialog{background:#111923;color:#e5edf6;border-color:#344354}body.dark #qrDialog textarea{background:#1b2634;color:#fff;border-color:#536478}body.dark #qrDialog button,body.dark #qrOpen{background:#173658;color:#dcecff;border-color:#42658b}
+</style>
+<dialog id="qrDialog" aria-labelledby="qrTitle"><header><h2 id="qrTitle">Localizar lista por QR</h2><button id="qrClose" type="button" aria-label="Fechar">×</button></header><p>Localize vários patinetes e destaque seus números no mapa.</p><div class="qr-actions"><button type="button" id="qrCamera">📷 Câmera</button><button type="button" onclick="document.getElementById('qrImage').click()">▦ Importar imagem</button><button type="button" id="qrStop" hidden>Desligar câmera</button></div><input id="qrImage" type="file" accept="image/*" hidden><video id="qrVideo" playsinline muted hidden></video><label for="qrText">Ou cole a lista de números</label><textarea id="qrText" placeholder="273551&#10;273591&#10;297595" spellcheck="false"></textarea><div class="qr-actions"><button type="button" id="qrLocate">Localizar / atualizar</button><button type="button" id="qrView">Ver no mapa</button><button type="button" id="qrClear">Limpar lista</button></div><p id="qrStatus" role="status" aria-live="polite"></p><div id="qrResults" aria-live="polite"></div></dialog>
+<script>
+// Localização em lote por QR; mantém a busca e os filtros existentes.
+const qrDialog=document.getElementById('qrDialog'),qrText=document.getElementById('qrText'),qrStatus=document.getElementById('qrStatus'),qrResults=document.getElementById('qrResults'),qrVideo=document.getElementById('qrVideo');
+let qrNumbers=[],qrMarkers=[],qrStream=null,qrSession=0,qrDecoderPromise=null,qrBusy=false;
+function parseQrNumbers(value){
+  return [...new Set(Array.from(String(value).matchAll(/(?:^|[^\d])(?:S\.)?(\d{3})-?(\d{3})(?!\d)/gi),m=>m[1]+m[2]))].slice(0,1000);
+}
+function qrNumber(value){return String(value||'').replace(/\D/g,'');}
+function qrMatches(numbers,bikes,features){
+  const available=new Set(bikes.map(b=>qrNumber(b.identifier||b.name)));
+  const located=new Map(features.map(f=>[qrNumber(f.properties.identifier),f]));
+  return numbers.map(number=>({number,feature:located.get(number),exists:available.has(number)}));
+}
+function stopQrCamera(){
+  ++qrSession;
+  if(qrStream)qrStream.getTracks().forEach(track=>track.stop());
+  qrStream=null;qrVideo.srcObject=null;qrVideo.hidden=true;
+  document.getElementById('qrStop').hidden=true;
+}
+function qrClose(){stopQrCamera();qrDialog.close();}
+function refreshQrSelection(fit=false){
+  qrMarkers.forEach(marker=>marker.remove());qrMarkers=[];qrResults.replaceChildren();
+  if(!qrNumbers.length){document.getElementById('qrOpen').textContent='▦ QR';return;}
+  const matches=qrMatches(qrNumbers,S,scooterData.features);
+  const found=matches.filter(x=>x.feature);
+  document.getElementById('qrOpen').textContent=`▦ QR · ${found.length}/${qrNumbers.length}`;
+  const summary=document.createElement('p');
+  const date=bikesUpdatedAt?new Date(bikesUpdatedAt).toLocaleTimeString('pt-BR'):'';
+  summary.textContent=`${found.length} localizados · ${matches.filter(x=>x.exists&&!x.feature).length} sem localização · ${matches.filter(x=>!x.exists).length} não encontrados. ${date?'Dados: '+date+'.':''}${bikesFetchFailed?' Última atualização falhou; exibindo dados anteriores.':''}`;
+  qrResults.appendChild(summary);
+  for(const item of matches){
+    const row=document.createElement(item.feature?'button':'p');row.className='qr-result';
+    row.textContent=`${item.number} — ${item.feature?'Ver no mapa':item.exists?'Sem localização disponível':bikesLoaded?'Não encontrado nos dados':'Consulta incompleta; tente atualizar'}`;
+    qrResults.appendChild(row);
+    if(!item.feature||!map)continue;
+    const feature=item.feature;
+    const el=document.createElement('button');el.type='button';el.className='qr-map-marker';el.textContent=item.number;
+    el.title='Localizar S.'+item.number;el.setAttribute('aria-label',el.title);
+    const open=()=>{qrClose();selectSearchHit({kind:'bike',id:String(feature.properties.id),name:feature.properties.identifier,item:feature});};
+    row.onclick=open;el.onclick=e=>{e.stopPropagation();open();};
+    qrMarkers.push(new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat(feature.geometry.coordinates).addTo(map));
+  }
+  if(fit&&found.length&&map){
+    const bounds=new maplibregl.LngLatBounds();found.forEach(x=>bounds.extend(x.feature.geometry.coordinates));
+    map.fitBounds(bounds,{padding:{top:165,bottom:65,left:55,right:55},maxZoom:16,duration:700});
+  }
+}
+async function applyQrList(){
+  if(qrBusy)return;
+  const numbers=parseQrNumbers(qrText.value);
+  if(!numbers.length){qrStatus.textContent='Nenhum número de patinete com seis dígitos encontrado.';return;}
+  qrBusy=true;document.getElementById('qrLocate').disabled=true;
+  stopQrCamera();qrStatus.textContent='Consultando os patinetes…';
+  try{
+    await loadBikes(true);qrNumbers=numbers;refreshQrSelection(true);
+    qrStatus.textContent=bikesFetchFailed?'Não foi possível atualizar. Os resultados usam os dados disponíveis.':'Lista localizada. Feche esta janela para visualizar os destaques.';
+  }catch(e){qrStatus.textContent='Não foi possível localizar agora. Tente novamente.';}
+  finally{qrBusy=false;document.getElementById('qrLocate').disabled=false;}
+}
+async function getQrDecoder(){
+  if('BarcodeDetector' in window){
+    try{const formats=await BarcodeDetector.getSupportedFormats();if(formats.includes('qr_code'))return new BarcodeDetector({formats:['qr_code']});}catch(e){}
+  }
+  if(!window.jsQR){
+    if(!qrDecoderPromise)qrDecoderPromise=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+      const timeout=setTimeout(()=>{script.remove();qrDecoderPromise=null;reject(new Error('Não foi possível carregar o leitor. Conecte-se à internet ou cole a lista.'));},15000);
+      script.onload=()=>{clearTimeout(timeout);resolve();};script.onerror=()=>{clearTimeout(timeout);qrDecoderPromise=null;script.remove();reject(new Error('Não foi possível carregar o leitor. Você pode colar os números abaixo.'));};document.head.appendChild(script);
+    });
+    await qrDecoderPromise;
+  }
+  return {detect:async canvas=>{const ctx=canvas.getContext('2d',{willReadFrequently:true}),pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const result=jsQR(pixels.data,pixels.width,pixels.height,{inversionAttempts:'attemptBoth'});return result?[{rawValue:result.data}]:[];}};
+}
+function qrCanvas(source,width,height,max=1800){
+  const scale=Math.min(1,max/Math.max(width,height)),canvas=document.createElement('canvas');
+  canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height);return canvas;
+}
+async function acceptQr(value){
+  stopQrCamera();
+  if(!parseQrNumbers(value).length){qrStatus.textContent='Este QR não contém uma lista de números de patinetes. Use o QR da lista.';return;}
+  qrText.value=value;await applyQrList();
+}
+document.getElementById('qrImage').onchange=async e=>{
+  const file=e.target.files[0];e.target.value='';if(!file)return;
+  stopQrCamera();const session=qrSession;qrStatus.textContent='Lendo imagem…';
+  let bitmap;
+  try{
+    const decoder=await getQrDecoder();bitmap=await createImageBitmap(file);
+    let codes=await decoder.detect(qrCanvas(bitmap,bitmap.width,bitmap.height));
+    if(!codes.length)codes=await decoder.detect(qrCanvas(bitmap,bitmap.width,bitmap.height,2800));
+    if(session!==qrSession||!qrDialog.open)return;
+    if(!codes.length)throw new Error('QR não encontrado na imagem. Envie uma imagem mais nítida ou cole a lista.');
+    await acceptQr(codes[0].rawValue);
+  }catch(err){if(session===qrSession)qrStatus.textContent=err.message||'Não foi possível ler esta imagem.';}
+  finally{bitmap?.close();}
+};
+document.getElementById('qrCamera').onclick=async()=>{
+  stopQrCamera();const session=qrSession;qrStatus.textContent='Abrindo câmera…';
+  try{
+    if(!navigator.mediaDevices?.getUserMedia)throw new Error('Câmera indisponível. Abra pelo link HTTPS do monitor ou importe uma imagem.');
+    const decoder=await getQrDecoder();if(session!==qrSession||!qrDialog.open)return;
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    if(session!==qrSession||!qrDialog.open){stream.getTracks().forEach(t=>t.stop());return;}
+    qrStream=stream;qrVideo.srcObject=stream;qrVideo.hidden=false;document.getElementById('qrStop').hidden=false;await qrVideo.play();
+    qrStatus.textContent='Aponte a câmera para o QR da lista.';
+    const scan=async()=>{
+      if(session!==qrSession||!qrStream)return;
+      try{
+        if(qrVideo.readyState>=2){const codes=await decoder.detect(qrCanvas(qrVideo,qrVideo.videoWidth,qrVideo.videoHeight));if(session!==qrSession)return;if(codes.length){await acceptQr(codes[0].rawValue);return;}}
+      }catch(e){if(session===qrSession){stopQrCamera();qrStatus.textContent='Falha na leitura da câmera. Importe a imagem ou cole a lista.';}return;}
+      if(session===qrSession)setTimeout(scan,220);
+    };scan();
+  }catch(err){if(session===qrSession){stopQrCamera();qrStatus.textContent=err.name==='NotAllowedError'?'Permita o acesso à câmera ou importe uma imagem.':err.message||'Não foi possível abrir a câmera.';}}
+};
+document.getElementById('qrOpen').onclick=()=>{qrDialog.showModal();qrStatus.textContent=qrNumbers.length?'Lista ativa; os destaques acompanham as atualizações do monitor.':'Leia o QR da lista ou cole os números dos patinetes.';refreshQrSelection();};
+document.getElementById('qrClose').onclick=qrClose;
+document.getElementById('qrStop').onclick=()=>{stopQrCamera();qrStatus.textContent='Câmera desligada.';};
+document.getElementById('qrLocate').onclick=applyQrList;
+document.getElementById('qrView').onclick=()=>{refreshQrSelection(true);qrClose();};
+document.getElementById('qrClear').onclick=()=>{qrNumbers=[];qrText.value='';stopQrCamera();refreshQrSelection();qrStatus.textContent='Lista removida do mapa.';};
+qrDialog.addEventListener('close',stopQrCamera);
+qrDialog.addEventListener('cancel',stopQrCamera);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopQrCamera();});
+window.addEventListener('pagehide',stopQrCamera);
+
+</script></body></html>

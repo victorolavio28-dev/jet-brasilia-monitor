@@ -572,10 +572,10 @@ function initMap(){
   map.on("zoomend",updateMapDetail);
   map.on("zoom",queuePopupSizing);
   map.on("resize",queuePopupSizing);
-  map.on("zoom",queueQrLayout);
-  map.on("rotate",queueQrLayout);
-  map.on("pitch",queueQrLayout);
-  map.on("resize",queueQrLayout);
+  map.on("zoom",()=>{if(typeof queueQrLayout==="function")queueQrLayout();});
+  map.on("rotate",()=>{if(typeof queueQrLayout==="function")queueQrLayout();});
+  map.on("pitch",()=>{if(typeof queueQrLayout==="function")queueQrLayout();});
+  map.on("resize",()=>{if(typeof queueQrLayout==="function")queueQrLayout();});
   // As camadas acompanham a câmera sem reconstrução dos estacionamentos.
 
 }
@@ -1502,7 +1502,7 @@ function stopQrCamera(){
   document.getElementById('qrStop').hidden=true;
 }
 function qrClose(){stopQrCamera();qrDialog.close();}
-// Grupos existem apenas na apresentação distante; patinetes individuais usam o GPS real.
+// Agrupa somente os ícones que se sobrepõem na tela, em qualquer nível de zoom.
 function queueQrLayout(){
   if(qrLayoutFrame!==null||!qrFoundItems.length)return;
   qrLayoutFrame=requestAnimationFrame(()=>{
@@ -1511,8 +1511,7 @@ function queueQrLayout(){
   });
 }
 function groupQrItems(items,project,zoom){
-  if(zoom>=17)return items.map(item=>[item]);
-  const radius=40,cells=new Map(),groups=[];
+  const radius=zoom>=14?28:24,cells=new Map(),groups=[];
   const ordered=items.slice().sort((a,b)=>a.number.localeCompare(b.number));
   for(const item of ordered){
     const point=project(item.feature.geometry.coordinates);
@@ -1522,7 +1521,7 @@ function groupQrItems(items,project,zoom){
     for(let x=cx-1;x<=cx+1;x++)for(let y=cy-1;y<=cy+1;y++){
       for(const group of cells.get(x+','+y)||[]){
         const d=(group.x-point.x)**2+(group.y-point.y)**2;
-        if(d<=distance){chosen=group;distance=d;}
+        if(d<distance){chosen=group;distance=d;}
       }
     }
     if(chosen)chosen.items.push(item);
@@ -1604,17 +1603,19 @@ async function applyQrList(){
   qrBusy=true;document.getElementById('qrLocate').disabled=true;
   stopQrCamera();qrStatus.textContent='Consultando os patinetes…';
   try{
-    await loadBikes(true);
-    if(revision!==qrListRevision)return;
     clearSearchSelection();mapSearch.value='';searchSuggestions.classList.remove('open');
     if(qrPreviousFilter===null)qrPreviousFilter=document.getElementById('f').value;
     qrNumbers=numbers;
     document.getElementById('f').value='none';document.getElementById('f').onchange();
     filterMenu.classList.remove('open');
     scootersVisible=false;updateScooterButton();renderScooters();
-    refreshQrSelection(true);qrClose();
+    qrClose();
+    refreshQrSelection(true);
+    await loadBikes(true);
+    if(revision!==qrListRevision)return;
+    refreshQrSelection(true);
     qrStatus.textContent=bikesFetchFailed?'Não foi possível atualizar. Os resultados usam os dados disponíveis.':'Lista localizada no mapa.';
-  }catch(e){qrStatus.textContent='Não foi possível localizar agora. Tente novamente.';}
+  }catch(e){console.warn('Falha ao localizar lista QR',e);qrStatus.textContent='Não foi possível localizar agora. Tente novamente.';}
   finally{qrBusy=false;document.getElementById('qrLocate').disabled=false;}
 }
 async function getQrDecoder(){

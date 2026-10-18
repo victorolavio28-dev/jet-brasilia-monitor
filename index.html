@@ -1511,7 +1511,7 @@ function queueQrLayout(){
   });
 }
 function groupQrItems(items,project,zoom){
-  const radius=zoom>=14?28:24,cells=new Map(),groups=[];
+  const radius=16,cells=new Map(),groups=[]; // Permite sobreposição parcial para separar com menos zoom.
   const ordered=items.slice().sort((a,b)=>a.number.localeCompare(b.number));
   for(const item of ordered){
     const point=project(item.feature.geometry.coordinates);

@@ -1,0 +1,123 @@
+const CITY="6787b812c168def1b2c6d143",INTERVAL=30000,TTL=3600000;
+const reply=(data,status=200)=>Response.json({service:"jet-reservas-v1",...data},{status,headers:{"Cache-Control":"no-store"}});
+const fail=(message,status)=>Object.assign(new Error(message),{status});
+export default {
+  async fetch(request,env){
+    const url=new URL(request.url);
+    if(!url.pathname.startsWith("/api/reservas"))return env.ASSETS.fetch(request);
+    const origin=request.headers.get("Origin");
+    const allowed=(env.ALLOWED_ORIGINS||"").split(",").map(s=>s.trim()).filter(Boolean);
+    if(origin&&origin!==url.origin&&!allowed.includes(origin))return reply({error:"Origem não autorizada."},403);
+    const cors=origin?{"Access-Control-Allow-Origin":origin,"Vary":"Origin","Access-Control-Allow-Headers":"Content-Type, X-Reservation-Token","Access-Control-Allow-Methods":"GET, POST, DELETE, OPTIONS"}:{};
+    if(request.method==="OPTIONS")return new Response(null,{status:204,headers:cors});
+    let result;
+    try{result=await env.RESERVAS.get(env.RESERVAS.idFromName("brasilia-v1")).fetch(request);}catch(_){result=reply({error:"Serviço temporariamente indisponível. Tente novamente."},503);}
+    const headers=new Headers(result.headers);for(const [k,v] of Object.entries(cors))headers.set(k,v);
+    return new Response(result.body,{status:result.status,headers});
+  }
+};
+export async function fetchAll(kind){
+  const page=async n=>{
+    const r=await fetch(`https://logistic.gojet.app/api/v0/urent/${kind}?city_id=${CITY}&page=${n}&limit=1000`,{cache:"no-store",signal:AbortSignal.timeout(12000)});
+    if(!r.ok)throw new Error("Contagem JET indisponível");
+    const d=await r.json();if(!Array.isArray(d.entries))throw new Error("Página incompleta");return d;
+  };
+  const first=await page(1),pages=Number(first.total_pages);
+  if(!Number.isInteger(pages)||pages<0||pages>40||(pages===0&&first.entries.length)||(first.page!=null&&Number(first.page)!==1))throw new Error("Paginação inválida");
+  const list=[...first.entries];
+  for(let i=2;i<=pages;i+=4){
+    const ids=Array.from({length:Math.min(4,pages-i+1)},(_,j)=>i+j);
+    const batch=await Promise.all(ids.map(page));
+    batch.forEach((d,j)=>{
+      if((d.page!=null&&Number(d.page)!==ids[j])||(d.total_pages!=null&&Number(d.total_pages)!==pages)||(d.total_items!=null&&first.total_items!=null&&Number(d.total_items)!==Number(first.total_items)))throw new Error("Paginação mudou");
+      list.push(...d.entries);
+    });
+  }
+  if(first.total_items!=null&&Number(first.total_items)!==list.length)throw new Error("Lista incompleta");
+  const ids=new Set(list.map(x=>x.id==null?null:String(x.id)));
+  if(ids.has(null)||ids.size!==list.length)throw new Error("Lista repetida ou incompleta");
+  return list;
+}
+export class Reservas {
+  constructor(ctx,env){this.ctx=ctx;this.env=env;this.snapshot=null;this.snapshotPending=null;this.lastCheck=0;this.upstreamError=false;}
+  async snapshotNow(){
+    if(this.snapshot&&Date.now()-this.snapshot.observedAt<INTERVAL)return this.snapshot;
+    if(this.snapshotPending)return this.snapshotPending;
+    this.snapshotPending=(async()=>{
+      const observedAt=Date.now();const [parkings,bikes]=await Promise.all([fetchAll("parkings"),fetchAll("bikes")]);
+      const counts=new Map();for(const b of bikes)if(b.parking_id!=null&&String(b.business_status).toLowerCase()==="operation"&&String(b.business_sub_status).toLowerCase()==="operationavailable"){
+        const id=String(b.parking_id);counts.set(id,(counts.get(id)||0)+1);
+      }
+      this.snapshot={observedAt,parkings:new Map(parkings.map(p=>[String(p.id),p])),counts};this.lastCheck=Date.now();this.upstreamError=false;return this.snapshot;
+    })().catch(e=>{this.upstreamError=true;throw e;}).finally(()=>{this.snapshotPending=null;});
+    return this.snapshotPending;
+  }
+  async reconcile(snapshot){
+    const now=Date.now();
+    await this.ctx.storage.transaction(async tx=>{
+      const all=await tx.list({prefix:"r:"});
+      for(const [key,r] of all){
+        if(r.expiresAt<=now||(snapshot&&snapshot.observedAt>r.createdAt&&snapshot.parkings.has(r.parkingId)&&(snapshot.counts.get(r.parkingId)||0)>=r.target))await tx.delete(key);
+      }
+    });
+  }
+  async arm(){
+    if((await this.ctx.storage.list({prefix:"r:",limit:1})).size){if(await this.ctx.storage.getAlarm()===null)await this.ctx.storage.setAlarm(Date.now()+INTERVAL);}
+  }
+  async view(ownerHash){
+    const reservations=[...(await this.ctx.storage.list({prefix:"r:"})).values()].filter(r=>r.expiresAt>Date.now()).map(({ownerHash:owner,...r})=>({...r,mine:owner===ownerHash}));
+    return {serverTime:Date.now(),reservations,lastCheck:this.lastCheck,upstreamError:this.upstreamError};
+  }
+  async fetch(request){
+    try{
+      const url=new URL(request.url),method=request.method;
+      const token=request.headers.get("X-Reservation-Token")||"";
+      if(method!=="GET"&&!/^[a-f0-9]{64}$/.test(token))throw fail("Identificação do navegador inválida.",401);
+      const ownerHash=token?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(token))),b=>b.toString(16).padStart(2,"0")).join(""):"";
+      if(method==="GET"&&url.pathname==="/api/reservas"){
+        await this.reconcile(null);
+        if((await this.ctx.storage.list({prefix:"r:",limit:1})).size){try{await this.reconcile(await this.snapshotNow());}catch(_){}await this.arm();}
+        return reply(await this.view(ownerHash));
+      }
+      if(method==="POST"&&url.pathname==="/api/reservas"){
+        if(Number(request.headers.get("Content-Length"))>2048)throw fail("Pedido muito grande.",413);
+        const raw=await request.text();if(raw.length>2048)throw fail("Pedido muito grande.",413);
+        let data;try{data=JSON.parse(raw);}catch(_){throw fail("Pedido inválido.",400);}
+        const {parkingId,target}=data,name=String(data.name||"").trim();
+        if(!/^[a-f0-9]{24}$/.test(parkingId)||!Number.isInteger(target)||target<1||target>500||name.length<2||name.length>40)throw fail("Confira o nome, o ponto e a meta.",400);
+        let snap;try{snap=await this.snapshotNow();}catch(_){throw fail("Não foi possível confirmar a contagem JET. Tente novamente.",503);}
+        if(!snap.parkings.has(parkingId))throw fail("Estacionamento não encontrado.",404);
+        if((snap.counts.get(parkingId)||0)>=target)throw fail("Este ponto já atingiu a meta. Atualize o monitor.",409);
+        await this.reconcile(snap);
+        await this.ctx.storage.transaction(async tx=>{
+          const key="r:"+parkingId,old=await tx.get(key);
+          if(old&&old.expiresAt>Date.now()){
+            if(old.ownerHash===ownerHash)return;
+            throw fail("Este estacionamento já está reservado. Atualize o monitor.",409);
+          }
+          const active=await tx.list({prefix:"r:"});
+          if([...active.values()].filter(r=>r.ownerHash===ownerHash&&r.expiresAt>Date.now()).length>=10)throw fail("Você já possui 10 reservas ativas.",429);
+          const createdAt=Date.now();
+          await tx.put(key,{parkingId,name,target,ownerHash,createdAt,expiresAt:createdAt+TTL});
+        });
+        await this.arm();return reply(await this.view(ownerHash),201);
+      }
+      if(method==="DELETE"&&/^\/api\/reservas\/[a-f0-9]{24}$/.test(url.pathname)){
+        const key="r:"+url.pathname.split("/").pop();
+        await this.ctx.storage.transaction(async tx=>{
+          const old=await tx.get(key);if(!old)return;
+          if(old.ownerHash!==ownerHash)throw fail("Somente quem reservou pode cancelar.",403);
+          await tx.delete(key);
+        });return reply(await this.view(ownerHash));
+      }
+      return reply({error:"Rota não encontrada."},404);
+    }catch(e){return reply({error:e.status?e.message:"Não foi possível processar o pedido."},e.status||500);}
+  }
+  async alarm(){
+    await this.reconcile(null);
+    if(!(await this.ctx.storage.list({prefix:"r:",limit:1})).size)return;
+    try{await this.reconcile(await this.snapshotNow());}catch(_){}
+    // Próximo alarme só existe enquanto houver reservas; expiração independe da API JET.
+    if((await this.ctx.storage.list({prefix:"r:",limit:1})).size)await this.ctx.storage.setAlarm(Date.now()+INTERVAL);
+  }
+}

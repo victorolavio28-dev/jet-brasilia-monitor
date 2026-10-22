@@ -177,9 +177,9 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 .cycle-control select:focus-visible{outline:2px solid #1677ff;outline-offset:2px}
 .cycle-control select option{background:var(--panel,#fff);color:var(--text,#172033)}
 </style></head><body>
-<header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática a cada 15s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option><option value="driver">Motorista</option><option value="none">Sem estacionamentos</option></select><input id="q" placeholder="Buscar ponto"></div></header>
+<header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática · ciclo-alvo de 15s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option><option value="driver">Motorista</option><option value="none">Sem estacionamentos</option></select><input id="q" placeholder="Buscar ponto"></div></header>
 <main><div id="map"></div><div class="map-topbar"><div class="search-box"><input type="search" id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Estacionamento ou nº do patinete"><button type="button" id="qrOpen" title="Localizar lista por QR" aria-label="Localizar lista por QR">▦ QR</button><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">🟡 Monitor</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button><button data-filter="driver">🚚 Motorista</button><button data-filter="none">🚫 Sem estacionamentos</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn" aria-expanded="false" aria-controls="infoPanel">🏆 Ranking</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar</button></div><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small><label class="cycle-control" title="Alterar ciclo do monitor">Ciclo <select id="cycleSelector" aria-label="Ciclo do monitor"><option value="weekend">Final de semana</option><option value="auto">Automático</option></select></label></div></div>
-<details class="map-legend" id="latestUpdate"><summary>Última atualização</summary><div class="update-notes"><small>22/10 · Identificação e ranking</small><ul><li>Nome salvo: informe uma vez para as próximas reservas.</li><li>Ranking de patinetes e estacionamentos no lugar do Info.</li><li>Reservas sem bloqueio por consulta JET e sem expiração por tempo.</li><li>Filtros de dia, semana e mês. Crédito de quem reservou.</li></ul></div></details>
+<details class="map-legend" id="latestUpdate"><summary>Última atualização</summary><div class="update-notes"><small>22/10 · Atualização mais ágil</small><ul><li>Consultas programadas a partir do início da anterior: menos espera entre atualizações.</li><li>Tempo da consulta visível ao lado do horário dos dados.</li><li>Nome salvo, reservas compartilhadas e ranking mantidos.</li></ul></div></details>
 <section id="infoPanel"><div class="ranking-panel" aria-labelledby="rankingTitle"><div class="ranking-head"><div><h2 id="rankingTitle">🏆 Ranking de abastecimento</h2><p id="rankingIdentity"></p></div><button type="button" id="rankingRename">Trocar nome</button></div>
 <div class="ranking-tabs" role="group" aria-label="Período do ranking"><button type="button" data-ranking-period="day" class="active" aria-pressed="true">Dia</button><button type="button" data-ranking-period="week" aria-pressed="false">Semana</button><button type="button" data-ranking-period="month" aria-pressed="false">Mês</button></div>
 <div class="ranking-tabs ranking-metrics" role="group" aria-label="Ordenar ranking por"><button type="button" data-ranking-metric="bikes" class="active" aria-pressed="true">🛴 Patinetes</button><button type="button" data-ranking-metric="parkings" aria-pressed="false">📍 Estacionamentos</button></div>
@@ -1242,15 +1242,39 @@ function observeBikeChanges(bikes,requestStartedAt){
     }
   }
 }
+// Cadência medida entre INÍCIOS, sem somar uma espera inteira após a resposta.
+const REFRESH_MIN_PAUSE_MS=1000;
+const refreshTiming={bikes:{startedMono:null,durationMs:null,startGapMs:null,samples:[]},parkings:{startedMono:null,durationMs:null,startGapMs:null,samples:[]}};
+function startRefreshTiming(kind){
+  const timing=refreshTiming[kind],now=performance.now();
+  timing.startGapMs=timing.startedMono===null?null:Math.max(0,now-timing.startedMono);
+  timing.startedMono=now;timing.startedAt=Date.now();
+}
+function finishRefreshTiming(kind,success){
+  const timing=refreshTiming[kind];if(timing.startedMono===null)return;
+  timing.durationMs=Math.max(0,performance.now()-timing.startedMono);
+  timing.samples.push({startedAt:timing.startedAt,durationMs:Math.round(timing.durationMs),startGapMs:timing.startGapMs===null?null:Math.round(timing.startGapMs),success});
+  if(timing.samples.length>30)timing.samples.shift();
+}
+function nextRefreshDelay(kind,retryMs,failed,urgent=false){
+  if(failed)return retryMs; // Falhas mantêm a espera de recuperação inteira.
+  if(urgent)return 250;
+  const started=refreshTiming[kind].startedMono;
+  if(started===null)return 0;
+  return Math.max(REFRESH_MIN_PAUSE_MS,retryMs-Math.max(0,performance.now()-started));
+}
+window.jetRefreshDiagnostics=()=>({targetMs:BIKE_REFRESH_MS,minPauseMs:REFRESH_MIN_PAUSE_MS,
+  bikes:{...refreshTiming.bikes,samples:refreshTiming.bikes.samples.map(s=>({...s}))},
+  parkings:{...refreshTiming.parkings,samples:refreshTiming.parkings.samples.map(s=>({...s}))}});
 function scheduleBikeRefresh(){
   clearTimeout(bikeRefreshTimer);bikeRefreshTimer=null;
-  if(document.hidden||navigator.onLine===false)return;
-  bikeRefreshTimer=setTimeout(()=>loadBikes(true),bikeRetryMs);
+  if(document.hidden||navigator.onLine===false||bikesRequest)return;
+  bikeRefreshTimer=setTimeout(()=>loadBikes(true),nextRefreshDelay("bikes",bikeRetryMs,bikesFetchFailed));
 }
 function scheduleParkingRefresh(){
   clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;
-  if(document.hidden||navigator.onLine===false)return;
-  parkingRefreshTimer=setTimeout(()=>load(),affectedParkingIds.size&&!parkingFetchFailed?250:parkingRetryMs);
+  if(document.hidden||navigator.onLine===false||parkingRequest)return;
+  parkingRefreshTimer=setTimeout(()=>load(),nextRefreshDelay("parkings",parkingRetryMs,parkingFetchFailed,affectedParkingIds.size>0));
 }
 function load(){
   // Botão, retorno ao app e timer compartilham a mesma consulta em andamento.
@@ -1258,6 +1282,7 @@ function load(){
   if(document.hidden||navigator.onLine===false)return Promise.resolve(false);
   clearTimeout(parkingRefreshTimer);parkingRefreshTimer=null;
   const requestStartedAt=Date.now();
+  startRefreshTiming("parkings");
   affectedParkingIds.clear();
   const controller=new AbortController();
   parkingRequest=(async()=>{
@@ -1281,7 +1306,7 @@ function load(){
       document.getElementById("s").textContent="Erro ao consultar a API: "+(e.name==="AbortError"?"tempo de resposta excedido":e.message);
       return false;
     }
-  })().finally(()=>{parkingRequest=null;scheduleParkingRefresh();});
+  })().finally(()=>{finishRefreshTiming("parkings",!parkingFetchFailed);parkingRequest=null;scheduleParkingRefresh();updateFreshness();});
   return parkingRequest;
 }
 function refreshActiveBikes(){
@@ -1391,6 +1416,7 @@ async function loadBikes(force=false){
   if(bikesLoaded&&!force){renderScooters();return true;}
   clearTimeout(bikeRefreshTimer);bikeRefreshTimer=null;
   const requestStartedAt=Date.now(),controller=new AbortController(),reservationScan=beginReservationScan();
+  startRefreshTiming("bikes");
   bikesRequest=(async()=>{
     try{
       const progressive=!S.length;
@@ -1413,7 +1439,7 @@ async function loadBikes(force=false){
       return false;
     }
   })();
-  try{return await bikesRequest;}finally{bikesRequest=null;scheduleBikeRefresh();}
+  try{return await bikesRequest;}finally{finishRefreshTiming("bikes",!bikesFetchFailed);bikesRequest=null;scheduleBikeRefresh();updateFreshness();}
 }
 
 
@@ -1479,12 +1505,12 @@ function updateMapDetail(){if(map)document.getElementById("map").classList.toggl
 function updateFreshness(){
   const el=document.getElementById("freshness");if(!el)return;
   const own=observedBikeStates!==null,updatedAt=own?bikesUpdatedAt:parkingsUpdatedAt;
-  const time=updatedAt?new Date(updatedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:"America/Sao_Paulo"}):null;
+  const time=updatedAt?new Date(updatedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit",timeZone:"America/Sao_Paulo"}):null;
   const failed=own?bikesFetchFailed:parkingFetchFailed;
   el.classList.toggle("fetch-error",failed);
   el.textContent=failed?(time?`Falha · última contagem ${time}`:"Falha na consulta · tente atualizar"):
-    own?`Disponíveis às ${time}`:parkingUsingCache?`Dados salvos · atualizando`:(time?`JET às ${time} · contando patinetes`:"Aguardando consulta");
-  el.title=own?"Contagem dos patinetes Operation/OperationAvailable vinculados ao estacionamento. Consulta a cada 15 segundos; em caso de falha, mantém a última leitura completa.":
+    own?`Dados ${time}${refreshTiming.bikes.durationMs===null?"":` · ${(refreshTiming.bikes.durationMs/1000).toLocaleString("pt-BR",{maximumFractionDigits:1})}s`}`:parkingUsingCache?`Dados salvos · atualizando`:(time?`JET às ${time} · contando patinetes`:"Aguardando consulta");
+  el.title=own?"Contagem dos patinetes Operation/OperationAvailable vinculados ao estacionamento. Ciclo-alvo de 15 segundos entre inícios, sem consultas sobrepostas. Se a resposta demorar mais, a próxima começa após uma pausa de 1 segundo. Em falhas, mantém a última leitura e aguarda antes de tentar novamente.":
     "Contagem JET temporária enquanto aguardamos a primeira consulta completa dos patinetes.";
 }
 

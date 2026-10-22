@@ -1,0 +1,11 @@
+worker.mjs
+wrangler.jsonc
+wrangler.toml
+*.zip
+*.txt
+*.md
+package*.json
+node_modules/
+.git/
+.wrangler/
+.assetsignore

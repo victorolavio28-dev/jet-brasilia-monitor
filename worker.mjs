@@ -1,4 +1,4 @@
-const CITY="6787b812c168def1b2c6d143",INTERVAL=30000,TTL=3600000;
+const CITY="6787b812c168def1b2c6d143",INTERVAL=30000;
 const reply=(data,status=200)=>Response.json({service:"jet-reservas-v1",...data},{status,headers:{"Cache-Control":"no-store"}});
 const fail=(message,status)=>Object.assign(new Error(message),{status});
 export default {
@@ -38,6 +38,21 @@ export async function fetchAll(kind){
   if(ids.has(null)||ids.size!==list.length)throw new Error("Lista repetida ou incompleta");
   return list;
 }
+// Datas civis de Brasília; semana de segunda a domingo.
+export function brazilDay(time=Date.now()){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(time));
+  const get=k=>parts.find(p=>p.type===k).value;return `${get("year")}-${get("month")}-${get("day")}`;
+}
+export function periodStart(period,time=Date.now()){
+  const day=brazilDay(time);if(period==="month")return day.slice(0,7)+"-01";
+  if(period==="week"){const d=new Date(day+"T12:00:00Z");d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
+  return day;
+}
+async function profileFor(tx,ownerHash,name){
+  const key="p:"+ownerHash;let p=await tx.get(key);
+  if(!p){p={id:crypto.randomUUID(),name,createdAt:Date.now()};await tx.put(key,p);}
+  return p;
+}
 export class Reservas {
   constructor(ctx,env){this.ctx=ctx;this.env=env;this.snapshot=null;this.snapshotPending=null;this.lastCheck=0;this.upstreamError=false;}
   async snapshotNow(){
@@ -57,16 +72,54 @@ export class Reservas {
     await this.ctx.storage.transaction(async tx=>{
       const all=await tx.list({prefix:"r:"});
       for(const [key,r] of all){
-        if(r.expiresAt<=now||(snapshot&&snapshot.observedAt>r.createdAt&&snapshot.parkings.has(r.parkingId)&&(snapshot.counts.get(r.parkingId)||0)>=r.target))await tx.delete(key);
+        // Reservas permanecem até meta ou cancelamento, inclusive as da versão anterior.
+        if(r.expiresAt){r.expiresAt=null;await tx.put(key,r);}
+        if(snapshot?.generations&&snapshot.generations.get(r.parkingId)!==r.createdAt)continue;
+        if(!snapshot||snapshot.observedAt<=Math.max(r.createdAt,r.lastObservedAt||0)||!snapshot.parkings.has(r.parkingId))continue;
+        const count=snapshot.counts.get(r.parkingId)||0;
+        // Reservas da versão anterior começam a medir nesta primeira observação.
+        if(!Number.isFinite(r.lastCount)){
+          r.lastCount=count;r.creditLimit=Math.max(0,r.target-count);r.credited=0;
+        }
+        const delta=Math.max(0,count-r.lastCount),remaining=Math.max(0,r.creditLimit-(r.credited||0));
+        const credit=Math.min(delta,remaining),completed=count>=r.target?1:0;
+        if(credit||completed){
+          const profile=await profileFor(tx,r.ownerHash,r.name);
+          const day=brazilDay(snapshot.observedAt),dailyKey=`d:${day}:${profile.id}`;
+          const daily=await tx.get(dailyKey)||{day,profileId:profile.id,name:profile.name,bikes:0,parkings:0};
+          daily.bikes+=credit;daily.parkings+=completed;daily.name=profile.name;
+          await tx.put(dailyKey,daily);
+        }
+        r.credited=(r.credited||0)+credit;r.lastCount=count;r.lastObservedAt=snapshot.observedAt;
+        if(completed)await tx.delete(key);else await tx.put(key,r);
       }
     });
   }
+  async ranking(period,ownerHash){
+    if(!["day","week","month"].includes(period))throw fail("Período inválido.",400);
+    const start=periodStart(period),end=brazilDay();
+    const daily=await this.ctx.storage.list({prefix:"d:",start:`d:${start}:`,end:`d:${end};`});
+    const profiles=[...(await this.ctx.storage.list({prefix:"p:"})).values()];
+    const names=new Map(profiles.map(p=>[p.id,p.name])),mine=ownerHash?(await this.ctx.storage.get("p:"+ownerHash))?.id:null;
+    const totals=new Map();
+    for(const entry of daily.values()){
+      const row=totals.get(entry.profileId)||{id:entry.profileId,name:names.get(entry.profileId)||entry.name,bikes:0,parkings:0,mine:entry.profileId===mine};
+      row.bikes+=entry.bikes;row.parkings+=entry.parkings;totals.set(entry.profileId,row);
+    }
+    return {serverTime:Date.now(),period,start,end,rows:[...totals.values()],upstreamError:this.upstreamError};
+  }
   async arm(){
+    // Por padrão as consultas completas do mapa confirmam os abastecimentos.
+    // A consulta direta é opcional; não mantém alarmes repetindo uma API bloqueada.
+    if(this.env.DIRECT_JET_CHECKS!=="true"){
+      if(await this.ctx.storage.getAlarm()!==null)await this.ctx.storage.deleteAlarm();
+      return;
+    }
     if((await this.ctx.storage.list({prefix:"r:",limit:1})).size){if(await this.ctx.storage.getAlarm()===null)await this.ctx.storage.setAlarm(Date.now()+INTERVAL);}
   }
   async view(ownerHash){
-    const reservations=[...(await this.ctx.storage.list({prefix:"r:"})).values()].filter(r=>r.expiresAt>Date.now()).map(({ownerHash:owner,...r})=>({...r,mine:owner===ownerHash}));
-    return {serverTime:Date.now(),reservations,lastCheck:this.lastCheck,upstreamError:this.upstreamError};
+    const reservations=[...(await this.ctx.storage.list({prefix:"r:"})).values()].map(({ownerHash:owner,...r})=>({...r,mine:owner===ownerHash}));
+    return {serverTime:Date.now(),version:3,profile:ownerHash?(await this.ctx.storage.get("p:"+ownerHash))||null:null,reservations,lastCheck:this.lastCheck,upstreamError:this.upstreamError};
   }
   async fetch(request){
     try{
@@ -76,8 +129,35 @@ export class Reservas {
       const ownerHash=token?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(token))),b=>b.toString(16).padStart(2,"0")).join(""):"";
       if(method==="GET"&&url.pathname==="/api/reservas"){
         await this.reconcile(null);
-        if((await this.ctx.storage.list({prefix:"r:",limit:1})).size){try{await this.reconcile(await this.snapshotNow());}catch(_){}await this.arm();}
+        await this.arm();
         return reply(await this.view(ownerHash));
+      }
+      if(method==="GET"&&url.pathname==="/api/reservas/ranking"){
+        await this.reconcile(null);
+        await this.arm();
+        return reply(await this.ranking(url.searchParams.get("period")||"day",ownerHash));
+      }
+      if(method==="POST"&&url.pathname==="/api/reservas/observations"){
+        const raw=await request.text();if(raw.length>40000)throw fail("Pedido muito grande.",413);
+        let data;try{data=JSON.parse(raw);}catch(_){throw fail("Pedido inválido.",400);}
+        const observedAt=data.observedAt,rows=data.entries;
+        if(!Number.isFinite(observedAt)||observedAt>Date.now()+1000||observedAt<Date.now()-120000||!Array.isArray(rows)||rows.length>500)throw fail("Consulta antiga ou inválida. Aguarde o mapa atualizar.",400);
+        const counts=new Map(),parkings=new Map(),generations=new Map();
+        for(const row of rows){
+          if(!/^[a-f0-9]{24}$/.test(row.parkingId)||!Number.isInteger(row.count)||row.count<0||row.count>10000||!Number.isFinite(row.createdAt)||counts.has(row.parkingId))throw fail("Contagem inválida.",400);
+          counts.set(row.parkingId,row.count);parkings.set(row.parkingId,{});generations.set(row.parkingId,row.createdAt);
+        }
+        await this.reconcile({observedAt,counts,parkings,generations});this.lastCheck=Date.now();this.upstreamError=false;
+        return reply(await this.view(ownerHash));
+      }
+      if(method==="POST"&&url.pathname==="/api/reservas/profile"){
+        const raw=await request.text();if(raw.length>2048)throw fail("Pedido muito grande.",413);
+        let data;try{data=JSON.parse(raw);}catch(_){throw fail("Pedido inválido.",400);}
+        const name=String(data.name||"").trim();if(name.length<2||name.length>40)throw fail("Informe um nome entre 2 e 40 caracteres.",400);
+        await this.ctx.storage.transaction(async tx=>{
+          const p=await profileFor(tx,ownerHash,name);p.name=name;await tx.put("p:"+ownerHash,p);
+          for(const [key,r] of await tx.list({prefix:"r:"}))if(r.ownerHash===ownerHash){r.name=name;await tx.put(key,r);}
+        });return reply(await this.view(ownerHash));
       }
       if(method==="POST"&&url.pathname==="/api/reservas"){
         if(Number(request.headers.get("Content-Length"))>2048)throw fail("Pedido muito grande.",413);
@@ -85,20 +165,20 @@ export class Reservas {
         let data;try{data=JSON.parse(raw);}catch(_){throw fail("Pedido inválido.",400);}
         const {parkingId,target}=data,name=String(data.name||"").trim();
         if(!/^[a-f0-9]{24}$/.test(parkingId)||!Number.isInteger(target)||target<1||target>500||name.length<2||name.length>40)throw fail("Confira o nome, o ponto e a meta.",400);
-        let snap;try{snap=await this.snapshotNow();}catch(_){throw fail("Não foi possível confirmar a contagem JET. Tente novamente.",503);}
-        if(!snap.parkings.has(parkingId))throw fail("Estacionamento não encontrado.",404);
-        if((snap.counts.get(parkingId)||0)>=target)throw fail("Este ponto já atingiu a meta. Atualize o monitor.",409);
-        await this.reconcile(snap);
+        // Registrar independe de conexão com a JET. A contagem do mapa é a base.
+        const initial=Number.isInteger(data.initialCount)&&data.initialCount>=0&&data.initialCount<=10000?data.initialCount:null;
+        await this.reconcile(null);
         await this.ctx.storage.transaction(async tx=>{
           const key="r:"+parkingId,old=await tx.get(key);
-          if(old&&old.expiresAt>Date.now()){
+          if(old){
             if(old.ownerHash===ownerHash)return;
             throw fail("Este estacionamento já está reservado. Atualize o monitor.",409);
           }
           const active=await tx.list({prefix:"r:"});
-          if([...active.values()].filter(r=>r.ownerHash===ownerHash&&r.expiresAt>Date.now()).length>=10)throw fail("Você já possui 10 reservas ativas.",429);
-          const createdAt=Date.now();
-          await tx.put(key,{parkingId,name,target,ownerHash,createdAt,expiresAt:createdAt+TTL});
+          if([...active.values()].filter(r=>r.ownerHash===ownerHash).length>=10)throw fail("Você já possui 10 reservas ativas.",429);
+          const profile=await profileFor(tx,ownerHash,name),createdAt=Date.now();
+          await tx.put(key,{parkingId,name:profile.name,target,ownerHash,createdAt,expiresAt:null,
+            lastCount:initial,lastObservedAt:createdAt,creditLimit:initial===null?null:Math.max(0,target-initial),credited:0});
         });
         await this.arm();return reply(await this.view(ownerHash),201);
       }
@@ -114,6 +194,7 @@ export class Reservas {
     }catch(e){return reply({error:e.status?e.message:"Não foi possível processar o pedido."},e.status||500);}
   }
   async alarm(){
+    if(this.env.DIRECT_JET_CHECKS!=="true")return;
     await this.reconcile(null);
     if(!(await this.ctx.storage.list({prefix:"r:",limit:1})).size)return;
     try{await this.reconcile(await this.snapshotNow());}catch(_){}

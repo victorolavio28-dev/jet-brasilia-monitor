@@ -1,4 +1,4 @@
-const CITY="6787b812c168def1b2c6d143",INTERVAL=30000;
+const CITY="6787b812c168def1b2c6d143",INTERVAL=30000,RESERVATION_TTL=30*60*1000;
 const reply=(data,status=200)=>Response.json({service:"jet-reservas-v1",...data},{status,headers:{"Cache-Control":"no-store"}});
 const fail=(message,status)=>Object.assign(new Error(message),{status});
 export default {
@@ -82,7 +82,9 @@ async function profileFor(tx,ownerHash,name){
   return p;
 }
 export class Reservas {
-  constructor(ctx,env){this.ctx=ctx;this.env=env;this.snapshot=null;this.snapshotPending=null;this.lastCheck=0;this.upstreamError=false;}
+  constructor(ctx,env){this.ctx=ctx;this.env=env;this.snapshot=null;this.snapshotPending=null;this.lastCheck=0;this.upstreamError=false;
+    this.ctx.blockConcurrencyWhile(async()=>{await this.reconcile(null);await this.arm();});
+  }
   async snapshotNow(){
     if(this.snapshot&&Date.now()-this.snapshot.observedAt<INTERVAL)return this.snapshot;
     if(this.snapshotPending)return this.snapshotPending;
@@ -100,8 +102,10 @@ export class Reservas {
     await this.ctx.storage.transaction(async tx=>{
       const all=await tx.list({prefix:"r:"});
       for(const [key,r] of all){
-        // Reservas permanecem até meta ou cancelamento, inclusive as da versão anterior.
-        if(r.expiresAt){r.expiresAt=null;await tx.put(key,r);}
+        // O prazo é fixo a partir da criação, inclusive para reservas já existentes.
+        const expiresAt=r.createdAt+RESERVATION_TTL;
+        if(now>=expiresAt){await tx.delete(key);continue;}
+        if(r.expiresAt!==expiresAt){r.expiresAt=expiresAt;await tx.put(key,r);}
         if(snapshot?.generations&&snapshot.generations.get(r.parkingId)!==r.createdAt)continue;
         if(!snapshot||snapshot.observedAt<=Math.max(r.createdAt,r.lastObservedAt||0)||!snapshot.parkings.has(r.parkingId))continue;
         const count=snapshot.counts.get(r.parkingId)||0;
@@ -137,18 +141,21 @@ export class Reservas {
     return {serverTime:Date.now(),period,start,end,rows:[...totals.values()],upstreamError:this.upstreamError};
   }
   async arm(){
-    // Por padrão as consultas completas do mapa confirmam os abastecimentos.
-    // A consulta direta é opcional; não mantém alarmes repetindo uma API bloqueada.
-    if(this.env.DIRECT_JET_CHECKS!=="true"){
+    const reservations=[...(await this.ctx.storage.list({prefix:"r:"})).values()];
+    if(!reservations.length){
       if(await this.ctx.storage.getAlarm()!==null)await this.ctx.storage.deleteAlarm();
       return;
     }
-    if((await this.ctx.storage.list({prefix:"r:",limit:1})).size){if(await this.ctx.storage.getAlarm()===null)await this.ctx.storage.setAlarm(Date.now()+INTERVAL);}
+    // A expiração funciona mesmo sem consultas diretas JET ou monitores abertos.
+    let next=Math.min(...reservations.map(r=>r.createdAt+RESERVATION_TTL));
+    if(this.env.DIRECT_JET_CHECKS==="true")next=Math.min(next,Date.now()+INTERVAL);
+    if(await this.ctx.storage.getAlarm()!==next)await this.ctx.storage.setAlarm(next);
   }
+
   async view(ownerHash){
     const reservations=[...(await this.ctx.storage.list({prefix:"r:"})).values()].map(({ownerHash:owner,...r})=>({...r,mine:owner===ownerHash}));
     const p=ownerHash?await this.ctx.storage.get("p:"+ownerHash):null;
-    return {serverTime:Date.now(),version:3,profile:p?{id:p.id,name:p.name,createdAt:p.createdAt,hasRecoveryCode:!!p.recoveryHash}:null,reservations,lastCheck:this.lastCheck,upstreamError:this.upstreamError};
+    return {serverTime:Date.now(),version:4,profile:p?{id:p.id,name:p.name,createdAt:p.createdAt,hasRecoveryCode:!!p.recoveryHash}:null,reservations,lastCheck:this.lastCheck,upstreamError:this.upstreamError};
   }
   async fetch(request){
     try{
@@ -206,7 +213,7 @@ export class Reservas {
           if(!/^[a-f0-9]{24}$/.test(row.parkingId)||!Number.isInteger(row.count)||row.count<0||row.count>10000||!Number.isFinite(row.createdAt)||counts.has(row.parkingId))throw fail("Contagem inválida.",400);
           counts.set(row.parkingId,row.count);parkings.set(row.parkingId,{});generations.set(row.parkingId,row.createdAt);
         }
-        await this.reconcile({observedAt,counts,parkings,generations});this.lastCheck=Date.now();this.upstreamError=false;
+        await this.reconcile({observedAt,counts,parkings,generations});await this.arm();this.lastCheck=Date.now();this.upstreamError=false;
         return reply(await this.view(ownerHash));
       }
       if(method==="POST"&&url.pathname==="/api/reservas/profile"){
@@ -236,7 +243,7 @@ export class Reservas {
           const active=await tx.list({prefix:"r:"});
           if([...active.values()].filter(r=>r.ownerHash===ownerHash).length>=10)throw fail("Você já possui 10 reservas ativas.",429);
           const profile=await profileFor(tx,ownerHash,name),createdAt=Date.now();
-          await tx.put(key,{parkingId,name:profile.name,target,ownerHash,createdAt,expiresAt:null,
+          await tx.put(key,{parkingId,name:profile.name,target,ownerHash,createdAt,expiresAt:createdAt+RESERVATION_TTL,
             lastCount:initial,lastObservedAt:createdAt,creditLimit:initial===null?null:Math.max(0,target-initial),credited:0});
         });
         await this.arm();return reply(await this.view(ownerHash),201);
@@ -247,17 +254,16 @@ export class Reservas {
           const old=await tx.get(key);if(!old)return;
           if(old.ownerHash!==ownerHash)throw fail("Somente quem reservou pode cancelar.",403);
           await tx.delete(key);
-        });return reply(await this.view(ownerHash));
+        });await this.arm();return reply(await this.view(ownerHash));
       }
       return reply({error:"Rota não encontrada."},404);
     }catch(e){return reply({error:e.status?e.message:"Não foi possível processar o pedido."},e.status||500);}
   }
   async alarm(){
-    if(this.env.DIRECT_JET_CHECKS!=="true")return;
     await this.reconcile(null);
-    if(!(await this.ctx.storage.list({prefix:"r:",limit:1})).size)return;
-    try{await this.reconcile(await this.snapshotNow());}catch(_){}
-    // Próximo alarme só existe enquanto houver reservas; expiração independe da API JET.
-    if((await this.ctx.storage.list({prefix:"r:",limit:1})).size)await this.ctx.storage.setAlarm(Date.now()+INTERVAL);
+    if(this.env.DIRECT_JET_CHECKS==="true"&&(await this.ctx.storage.list({prefix:"r:",limit:1})).size){
+      try{await this.reconcile(await this.snapshotNow());}catch(_){}
+    }
+    await this.arm();
   }
 }

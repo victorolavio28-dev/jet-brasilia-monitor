@@ -342,13 +342,13 @@ async function syncReservations(force=false){
 function renderReservationBox(x,box){
   const el=box.querySelector(".reserve-box");if(!el)return;
   const r=activeReservation(x.id),eligible=isMonitor(x)&&Number(x.target_bikes_count)>0;
-  const text=document.createElement("p");text.textContent=r?`Recebendo patinetes · ${r.name} · meta reservada: ${r.target}`:eligible?"Reserve este ponto antes de levar os patinetes.":"Reserva disponível para pontos do monitor com meta definida.";
+  const text=document.createElement("p");text.textContent=r?`Recebendo patinetes · ${r.name} · meta reservada: ${r.target}`:eligible?"Reserve este ponto antes de levar os patinetes. Prazo: 30 minutos.":"Reserva disponível para pontos do monitor com meta definida.";
   el.replaceChildren(text);
   if(r?.mine||(!r&&eligible)){
     const btn=document.createElement("button");btn.type="button";btn.className="reserve-button";btn.textContent=reservationBusy?"Aguarde…":r?"Cancelar minha reserva":"Reservar abastecimento";btn.disabled=reservationBusy||!reservationToken;
     btn.onclick=e=>{e.stopPropagation();changeReservation(x,r);};el.appendChild(btn);
   }
-  const note=document.createElement("small");note.className="reserve-note";note.textContent=!reservationToken?"Permita o armazenamento do navegador para reservar.":reservationMessage+(r?" · Encerra ao atingir a meta reservada ou ao cancelar.":"");el.appendChild(note);
+  const note=document.createElement("small");note.className="reserve-note";note.textContent=!reservationToken?"Permita o armazenamento do navegador para reservar.":reservationMessage+(r?` · Encerra ao atingir a meta, cancelar ou completar 30 minutos.${r.expiresAt?" Expira às "+new Date(r.expiresAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):""}`:"");el.appendChild(note);
 }
 async function changeReservation(x,reservation){
   if(reservationBusy)return;
@@ -378,7 +378,7 @@ async function flushReservationCounts(){
   if(reservationObservationBusy||reservationBusy||reservationRequest||!reservationObservationPending)return;
   const data=reservationObservationPending;reservationObservationPending=null;reservationObservationBusy=true;
   try{applyReservations(await reservationApi("/observations",{method:"POST",body:JSON.stringify(data)}));if(rankingIsOpen()&&!rankingLoading)loadRanking();}
-  catch(_){reservationMessage="Reserva mantida · não foi possível enviar a contagem. Nova tentativa na próxima atualização.";refreshParkingPopup();}
+  catch(_){reservationMessage="Não foi possível enviar a contagem · o prazo da reserva continua correndo. Nova tentativa na próxima atualização.";refreshParkingPopup();}
   finally{reservationObservationBusy=false;if(reservationObservationPending)flushReservationCounts();}
 }
 // Inicia após o script principal; não grava reservas locais como se fossem compartilhadas.

@@ -64,7 +64,7 @@ body.dark .maplibregl-ctrl-group{background:#111923!important;border-color:#3443
 @media(max-width:800px){.rotate-tools{bottom:105px;right:9px}.jet-marker{width:25px;height:25px}}
 .search-box{position:relative;min-width:210px}.search-suggestions{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--panel,#fff);border:1px solid rgba(127,127,127,.25);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden;z-index:2000}.search-suggestions.open{display:block}.search-suggestions button{display:block;width:100%;padding:10px 12px;text-align:left;border:0;background:transparent;color:inherit;cursor:pointer}.search-suggestions button:hover{background:rgba(127,127,127,.12)}.search-suggestions strong,.search-suggestions small{display:block}.search-suggestions small{opacity:.65;margin-top:2px}
 
-.reserved{color:#6d28d9!important}.reserve-box{padding:9px;background:#f3e8ff;border-radius:9px;margin:8px 0;color:#4c1d95;font-size:12px}.reserve-box p{margin:0 0 7px}.reserve-button{width:100%;background:#6d28d9;color:white;border:0;padding:10px;cursor:pointer;font-weight:800}.reserve-button:disabled{opacity:.55;cursor:wait}.reserve-note{display:block;font-size:11px;margin-top:6px;line-height:1.4}
+.reserved{color:#6d28d9!important}.reserve-box{padding:9px;background:#f3e8ff;border-radius:9px;margin:8px 0;color:#4c1d95;font-size:12px}.reserve-box p{margin:0 0 7px}.reserve-owner-label{display:block;font-size:11px;font-weight:600;line-height:1.3}.reserve-owner-name{display:block;font-size:19px;font-weight:850;line-height:1.25;margin:2px 0 4px;overflow-wrap:anywhere}.reserve-target{display:block;font-size:12px;line-height:1.4}.parking-popup.has-reservation .popup-status,.parking-popup.has-reservation .popup-update{display:none}.reserve-button{width:100%;background:#6d28d9;color:white;border:0;padding:10px;cursor:pointer;font-weight:800}.reserve-button:disabled{opacity:.55;cursor:wait}.reserve-note{display:block;font-size:11px;margin-top:6px;line-height:1.4}
 
 .ranking-panel{padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px;color:var(--text)}.ranking-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.ranking-head h2{font-size:18px;margin:0}.ranking-head p{font-size:12px;color:var(--muted);margin:7px 0 12px}.ranking-panel button{background:var(--bg);color:var(--text);border-color:var(--line);min-height:40px;cursor:pointer}.ranking-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:9px 0}.ranking-tabs button{flex:1}.ranking-tabs button.active{background:#6d28d9;color:#fff;border-color:#6d28d9}.ranking-explanation{font-size:12px;color:var(--muted);line-height:1.5}.ranking-table-wrap{overflow:auto}.ranking-table{width:100%;font-size:14px}.ranking-table td,.ranking-table th{padding:12px 8px}.ranking-table td:nth-child(2){overflow-wrap:anywhere;min-width:100px}.ranking-table td:nth-child(n+3),.ranking-table th:nth-child(n+3){text-align:right;font-weight:800}.ranking-mine{background:#8b5cf61c}.ranking-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.ranking-foot small{color:var(--muted);line-height:1.5}#legacyInfo[hidden]{display:none!important}
 </style>
@@ -342,13 +342,22 @@ async function syncReservations(force=false){
 function renderReservationBox(x,box){
   const el=box.querySelector(".reserve-box");if(!el)return;
   const r=activeReservation(x.id),eligible=isMonitor(x)&&Number(x.target_bikes_count)>0;
-  const text=document.createElement("p");text.textContent=r?`Recebendo patinetes · ${r.name} · meta reservada: ${r.target}`:eligible?"Reserve este ponto antes de levar os patinetes. Prazo: 30 minutos.":"Reserva disponível para pontos do monitor com meta definida.";
+  const popup=box.querySelector(".parking-popup");popup?.classList.toggle("has-reservation",!!r);
+  const text=document.createElement("p");
+  if(r){
+    const label=document.createElement("span");label.className="reserve-owner-label";label.textContent="Reservado por";
+    const name=document.createElement("strong");name.className="reserve-owner-name";name.textContent=r.name;
+    const target=document.createElement("span");target.className="reserve-target";target.textContent=`Meta reservada: ${r.target}`;
+    text.append(label,name,target);
+  }else text.textContent=eligible?"Reserve este ponto antes de levar os patinetes. Prazo: 30 minutos.":"Reserva disponível para pontos do monitor com meta definida.";
   el.replaceChildren(text);
   if(r?.mine||(!r&&eligible)){
     const btn=document.createElement("button");btn.type="button";btn.className="reserve-button";btn.textContent=reservationBusy?"Aguarde…":r?"Cancelar minha reserva":"Reservar abastecimento";btn.disabled=reservationBusy||!reservationToken;
     btn.onclick=e=>{e.stopPropagation();changeReservation(x,r);};el.appendChild(btn);
   }
-  const note=document.createElement("small");note.className="reserve-note";note.textContent=!reservationToken?"Permita o armazenamento do navegador para reservar.":reservationMessage+(r?` · Encerra ao atingir a meta, cancelar ou completar 30 minutos.${r.expiresAt?" Expira às "+new Date(r.expiresAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):""}`:"");el.appendChild(note);
+  if(!r){
+    const note=document.createElement("small");note.className="reserve-note";note.textContent=!reservationToken?"Permita o armazenamento do navegador para reservar.":reservationMessage;el.appendChild(note);
+  }
 }
 async function changeReservation(x,reservation){
   if(reservationBusy)return;

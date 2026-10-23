@@ -66,14 +66,7 @@ body.dark .maplibregl-ctrl-group{background:#111923!important;border-color:#3443
 
 .reserved{color:#6d28d9!important}.reserve-box{padding:9px;background:#f3e8ff;border-radius:9px;margin:8px 0;color:#4c1d95;font-size:12px}.reserve-box p{margin:0 0 7px}.reserve-button{width:100%;background:#6d28d9;color:white;border:0;padding:10px;cursor:pointer;font-weight:800}.reserve-button:disabled{opacity:.55;cursor:wait}.reserve-note{display:block;font-size:11px;margin-top:6px;line-height:1.4}
 
-
-.ranking-panel{padding:18px 16px 10px;background:var(--panel);border:1px solid var(--line);border-radius:16px;color:var(--text)}
-.ranking-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.ranking-head h2{font-size:19px;letter-spacing:-.35px;margin:0;font-weight:800}.ranking-profile{display:flex;align-items:center;gap:7px;min-width:0;max-width:65%;font-size:11px}.ranking-profile span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ranking-panel button{font-family:inherit;cursor:pointer;touch-action:manipulation}.ranking-panel button:focus-visible{outline:2px solid #8b5cf6;outline-offset:3px}.ranking-panel button:disabled{opacity:.5;cursor:wait}
-.ranking-panel #rankingRename{background:none;border:0;color:#7c3aed;padding:7px 0;font-size:11px;white-space:nowrap;border-radius:4px;min-height:32px}
-.ranking-tabs{display:flex;gap:3px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:10px;margin:0 0 14px}.ranking-tabs button{flex:1;min-width:0;min-height:34px;padding:7px 8px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:12px;font-weight:600}.ranking-tabs button.active{background:var(--panel);color:var(--text);box-shadow:0 1px 4px #00000012}
-.ranking-metrics{padding:0;background:none;border:0;border-radius:0;gap:18px;margin:0}.ranking-metrics button{flex:initial;min-height:39px;padding:7px 0 10px;border-bottom:2px solid transparent;border-radius:0;font-size:13px;white-space:nowrap}.ranking-metrics button.active{background:none;box-shadow:none;color:#7c3aed;border-bottom-color:#7c3aed}
-.ranking-table-wrap{overflow:auto}.ranking-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px}.ranking-table th{font-size:10px;font-weight:500;color:var(--muted);padding:11px 0 9px;border-bottom:1px solid var(--line)}.ranking-table td{padding:14px 0;border-bottom:1px solid var(--line);vertical-align:middle}.ranking-table tr:last-child td{border-bottom:0}.ranking-table th:first-child,.ranking-table td:first-child{width:34px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}.ranking-table th:nth-child(2),.ranking-table td:nth-child(2){padding-right:10px;overflow-wrap:anywhere}.ranking-table th:last-child,.ranking-table td:last-child{width:100px;text-align:right;font-variant-numeric:tabular-nums}.ranking-table td:last-child{font-size:20px;font-weight:800;letter-spacing:-.4px}.ranking-table .ranking-empty{width:auto!important;text-align:center!important;padding:28px 10px!important;font-size:12px!important;font-weight:400!important;letter-spacing:normal!important;color:var(--muted)}.ranking-mine td:nth-child(2){font-weight:700}.ranking-mine td:last-child{color:#7c3aed}.ranking-you{color:var(--muted);font-size:10px;font-weight:400;margin-left:5px}.ranking-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:5px;margin-top:4px}.ranking-foot small{font-size:10px;color:var(--muted);line-height:1.4}.ranking-panel #rankingRefresh{display:grid;place-items:center;padding:0;width:32px;height:32px;background:none;border:0;color:var(--muted);font-size:19px;border-radius:7px}.ranking-panel #rankingRefresh:hover{background:var(--bg)}body.dark .ranking-panel #rankingRename,body.dark .ranking-metrics button.active,body.dark .ranking-mine td:last-child{color:#b79aff}body.dark .ranking-metrics button.active{border-bottom-color:#b79aff}#legacyInfo[hidden]{display:none!important}
-
+.ranking-panel{padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px;color:var(--text)}.ranking-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.ranking-head h2{font-size:18px;margin:0}.ranking-head p{font-size:12px;color:var(--muted);margin:7px 0 12px}.ranking-panel button{background:var(--bg);color:var(--text);border-color:var(--line);min-height:40px;cursor:pointer}.ranking-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:9px 0}.ranking-tabs button{flex:1}.ranking-tabs button.active{background:#6d28d9;color:#fff;border-color:#6d28d9}.ranking-explanation{font-size:12px;color:var(--muted);line-height:1.5}.ranking-table-wrap{overflow:auto}.ranking-table{width:100%;font-size:14px}.ranking-table td,.ranking-table th{padding:12px 8px}.ranking-table td:nth-child(2){overflow-wrap:anywhere;min-width:100px}.ranking-table td:nth-child(n+3),.ranking-table th:nth-child(n+3){text-align:right;font-weight:800}.ranking-mine{background:#8b5cf61c}.ranking-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.ranking-foot small{color:var(--muted);line-height:1.5}#legacyInfo[hidden]{display:none!important}
 </style>
 
 <style id="v3css">
@@ -186,14 +179,27 @@ body.dark .popup-action{background:#173658;color:#dcecff}body.dark .operations-s
 </style></head><body>
 <header id="header"><h1>JET Brasília — Monitor Operacional</h1><div class="sub">Dados dos endpoints do mapa JET • atualização automática · ciclo-alvo de 15s</div><div class="controls"><button id="r">↻ Atualizar</button><select id="f"><option value="all">Todos</option><option value="monitor" selected>Monitorados</option><option value="monitor-zero">Monitor zerados</option><option value="driver">Motorista</option><option value="none">Sem estacionamentos</option></select><input id="q" placeholder="Buscar ponto"></div></header>
 <main><div id="map"></div><div class="map-topbar"><div class="search-box"><input type="search" id="mapSearch" autocomplete="off" inputmode="search" placeholder="🔎 Estacionamento ou nº do patinete"><button type="button" id="qrOpen" title="Localizar lista por QR" aria-label="Localizar lista por QR">▦ QR</button><div id="searchSuggestions" class="search-suggestions"></div></div><div class="map-actions"><div class="filter-wrap"><button id="filterBtn">🟡 Monitor</button><div id="filterMenu" class="filter-menu"><button data-filter="all">📍 Todos os estacionamentos</button><button data-filter="monitor" class="active">🟡 Estacionamentos do monitor</button><button data-filter="monitor-zero">🔴 Monitor zerados</button><button data-filter="driver">🚚 Motorista</button><button data-filter="none">🚫 Sem estacionamentos</button></div></div><button id="themeBtn">☀️ Dark</button><button id="infoBtn" aria-expanded="false" aria-controls="infoPanel">🏆 Ranking</button><button id="scooterBtn" class="scooter-toggle" aria-pressed="false">🛴 Mostrar</button></div><div class="operations-strip"><strong id="opSummary">Carregando pontos…</strong><small id="freshness" role="status" aria-live="polite">Aguardando consulta</small><label class="cycle-control" title="Alterar ciclo do monitor">Ciclo <select id="cycleSelector" aria-label="Ciclo do monitor"><option value="weekend">Final de semana</option><option value="auto">Automático</option></select></label></div></div>
-<details class="map-legend" id="latestUpdate"><summary>Última atualização</summary><div class="update-notes"><small>22/10 · Ranking simplificado</small><ul><li>Ranking mais compacto, com menos textos e botões discretos.</li><li>Patinetes e Estacionamentos agora mostram somente o total escolhido.</li><li>Filtros de dia, semana e mês mantidos.</li></ul></div></details>
-<section id="infoPanel"><div class="ranking-panel" aria-labelledby="rankingTitle"><div class="ranking-head"><h2 id="rankingTitle">Ranking</h2><div class="ranking-profile"><span id="rankingIdentity"></span><button type="button" id="rankingRename">Trocar nome</button></div></div>
+<details class="map-legend" id="latestUpdate"><summary>Última atualização</summary><div class="update-notes"><small>23/10 · Recuperação de acesso</small><ul><li>Meu acesso: guarde um código para recuperar seu cadastro e ranking.</li><li>Consultas programadas a partir do início da anterior: menos espera entre atualizações.</li><li>Tempo da consulta visível ao lado do horário dos dados.</li><li>Nome salvo, reservas compartilhadas e ranking mantidos.</li></ul></div></details>
+<section id="infoPanel"><div class="ranking-panel" aria-labelledby="rankingTitle"><div class="ranking-head"><div><h2 id="rankingTitle">🏆 Ranking de abastecimento</h2><p id="rankingIdentity"></p></div><div><button type="button" id="rankingRename">Trocar nome</button> <button type="button" id="rankingAccess">Meu acesso</button></div></div>
 <div class="ranking-tabs" role="group" aria-label="Período do ranking"><button type="button" data-ranking-period="day" class="active" aria-pressed="true">Dia</button><button type="button" data-ranking-period="week" aria-pressed="false">Semana</button><button type="button" data-ranking-period="month" aria-pressed="false">Mês</button></div>
-<div class="ranking-tabs ranking-metrics" role="group" aria-label="Tipo de ranking"><button type="button" data-ranking-metric="bikes" class="active" aria-pressed="true">Patinetes</button><button type="button" data-ranking-metric="parkings" aria-pressed="false">Estacionamentos</button></div>
-<div class="ranking-table-wrap"><table class="ranking-table"><thead><tr><th scope="col">Pos.</th><th scope="col">Nome</th><th scope="col" id="rankingMetricLabel">Patinetes</th></tr></thead><tbody id="rankingRows"></tbody></table></div><div class="ranking-foot"><small id="rankingMessage" role="status" aria-live="polite">Carregando…</small><button type="button" id="rankingRefresh" title="Atualizar ranking" aria-label="Atualizar ranking">↻</button></div></div><div id="legacyInfo" hidden aria-hidden="true"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><div class="sub">Somente monitor zerado · maior tempo primeiro.<br>Tempo observado neste dispositivo; reinicia após mais de 1 min sem consulta.</div><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Tempo zerado</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 20%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="statusTrackerInfo" style="padding:10px 0 0">Aguardando comparação dos patinetes…</div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></div></section></main>
+<div class="ranking-tabs ranking-metrics" role="group" aria-label="Ordenar ranking por"><button type="button" data-ranking-metric="bikes" class="active" aria-pressed="true">🛴 Patinetes</button><button type="button" data-ranking-metric="parkings" aria-pressed="false">📍 Estacionamentos</button></div>
+<p class="ranking-explanation">Crédito de quem reservou · aumentos observados até o limite que faltava para a meta. Estacionamento conta ao atingir a meta.</p>
+<div class="ranking-table-wrap"><table class="ranking-table"><thead><tr><th>Pos.</th><th>Nome</th><th>🛴</th><th>📍</th></tr></thead><tbody id="rankingRows"></tbody></table></div><div class="ranking-foot"><small id="rankingMessage" role="status" aria-live="polite">Carregando ranking…</small><button type="button" id="rankingRefresh">↻ Atualizar</button></div><p class="ranking-explanation">Hoje · semana desde segunda · mês desde o dia 1. O histórico começa nesta atualização; reservas anteriores não geram créditos retroativos de patinetes.</p></div><div id="legacyInfo" hidden aria-hidden="true"><div class="cards"><div class="card"><div class="label">ESTACIONAMENTOS</div><div class="value" id="p">—</div></div><div class="card"><div class="label">PATINETES</div><div class="value" id="b">—</div></div><div class="card"><div class="label">SEM PATINETES</div><div class="value" id="z">—</div></div><div class="card"><div class="label">MONITORADOS</div><div class="value" id="m">—</div></div><div class="card"><div class="label">BATERIA MÉDIA</div><div class="value" id="bat">—</div></div></div><div class="tables"><div class="box"><b>Pontos de atenção</b><div class="sub">Somente monitor zerado · maior tempo primeiro.<br>Tempo observado neste dispositivo; reinicia após mais de 1 min sem consulta.</div><table><thead><tr><th>Ponto</th><th>Qtd.</th><th>Tempo zerado</th><th>Status</th></tr></thead><tbody id="att"></tbody></table></div><div class="box"><b>Patinetes com bateria &lt; 20%</b><table><thead><tr><th>Patinete</th><th>Bateria</th><th>Status</th></tr></thead><tbody id="lb"></tbody></table></div></div><div class="sub" id="statusTrackerInfo" style="padding:10px 0 0">Aguardando comparação dos patinetes…</div><div class="sub" id="s" style="padding:10px 0">Carregando...</div></div></section></main>
 <dialog id="parkingBikesDialog" class="parking-bikes-dialog" aria-labelledby="parkingBikesTitle">
 <div class="parking-bikes-header"><div><h2 id="parkingBikesTitle">Patinetes do estacionamento</h2><p id="parkingBikesName"></p></div><button type="button" id="parkingBikesClose" class="parking-bikes-close" aria-label="Fechar lista">×</button></div>
 <div id="parkingBikesContent" class="parking-bikes-content" aria-live="polite"></div></dialog>
+<dialog id="rankingAccessDialog" aria-labelledby="accessTitle" style="width:min(420px,90vw);box-sizing:border-box;border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--text);padding:22px">
+<form method="dialog" style="float:right"><button aria-label="Fechar">✕</button></form>
+<h2 id="accessTitle" style="margin:0 35px 14px 0">Meu acesso</h2>
+<p style="font-size:14px">Guarde seu código fora do navegador para recuperar o ranking em outro aparelho ou após apagar os dados.</p>
+<button type="button" id="accessSave">Gerar código de recuperação</button>
+<div id="accessCodeBox" hidden><p>Copie e guarde este código. Ele dá acesso ao seu cadastro e substitui o anterior.</p><textarea id="accessCode" readonly aria-label="Seu código de recuperação" style="width:100%;box-sizing:border-box;height:80px"></textarea><button type="button" id="accessCopy">Copiar código</button></div>
+<hr><label for="accessRestoreCode">Já tem um código?</label><input id="accessRestoreCode" type="password" autocomplete="off" placeholder="JET-…" style="display:block;width:100%;box-sizing:border-box;margin:10px 0"><button type="button" id="accessRestore">Recuperar meu cadastro</button>
+<details style="margin-top:18px"><summary>Recuperação pelo administrador</summary><p>Para cadastros antigos sem código. Use somente para recuperar o próprio acesso ou ajudar o titular.</p>
+<label for="accessAdminKey">Chave de administrador</label><input id="accessAdminKey" type="password" autocomplete="off" style="display:block;width:100%;box-sizing:border-box;margin:10px 0"><button type="button" id="accessList">Buscar cadastros</button>
+<label for="accessProfiles" style="display:block;margin-top:10px">Cadastro antigo</label><select id="accessProfiles" style="width:100%;margin:10px 0"><option value="">Busque os cadastros primeiro</option></select><button type="button" id="accessAdminRestore">Recuperar cadastro selecionado</button></details>
+<p id="accessMessage" role="status" aria-live="polite" style="font-size:14px;overflow-wrap:anywhere"></p>
+</dialog>
 <script src="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js" onload="resolveJetTurf(true)" onerror="resolveJetTurf(false)"></script><script>
 // Vazio = serviço no mesmo endereço do monitor. Para hospedagem separada,
@@ -204,7 +210,7 @@ let registrationBusy=false,registrationAsked=false;
 function validReservationName(name){return typeof name==="string"&&name.trim().length>=2&&name.trim().length<=40;}
 function rememberReservationName(name){
   reservationName=name.trim();try{localStorage.setItem("jetReservationNameV1",reservationName);}catch(_){}
-  const label=document.getElementById("rankingIdentity");if(label)label.textContent=reservationName||"Sem nome";
+  const label=document.getElementById("rankingIdentity");if(label)label.textContent=reservationName?`Seu nome: ${reservationName}`:"Identifique-se para reservar";
 }
 async function registerReservationName(edit=false){
   if(registrationBusy||!reservationToken)return false;
@@ -218,40 +224,74 @@ async function registerReservationName(edit=false){
   catch(e){alert("Não foi possível salvar seu nome. "+e.message);return false;}
   finally{registrationBusy=false;}
 }
+function setupAccessRecovery(){
+  const el=id=>document.getElementById(id),dialog=el("rankingAccessDialog");let busy=false;
+  const message=text=>{el("accessMessage").textContent=text;};
+  const run=async action=>{
+    if(busy||reservationBusy||registrationBusy){message("Aguarde a operação atual terminar.");return;}
+    busy=true;reservationBusy=true;message("Aguarde…");
+    dialog.querySelectorAll("button[type=button]").forEach(b=>b.disabled=true);
+    try{await reservationRequest;while(reservationObservationBusy)await new Promise(r=>setTimeout(r,25));await action();}
+    catch(e){message(e.message+" Se a resposta demorou, atualize o ranking para conferir o cadastro antes de tentar de novo.");}
+    finally{busy=false;reservationBusy=false;dialog.querySelectorAll("button[type=button]").forEach(b=>b.disabled=false);refreshParkingPopup();flushReservationCounts();}
+  };
+  const clearSecrets=()=>{["accessAdminKey","accessRestoreCode","accessCode"].forEach(id=>el(id).value="");el("accessCodeBox").hidden=true;el("accessProfiles").replaceChildren(new Option("Busque os cadastros primeiro",""));};
+  el("rankingAccess").onclick=()=>{message("");dialog.showModal();};
+  dialog.addEventListener("close",clearSecrets);
+  el("accessSave").onclick=()=>run(async()=>{
+    if(!validReservationName(reservationName))throw new Error("Informe seu nome no ranking antes de gerar um código.");
+    if(!confirm("Gerar um novo código? O anterior deixará de funcionar. Guarde o novo antes de fechar esta janela.")){message("");return;}
+    const data=await reservationApi("/recovery/code",{method:"POST",body:"{}"});
+    el("accessCode").value=data.code;el("accessCodeBox").hidden=false;message("Código gerado. Guarde em um local seguro fora do navegador.");
+  });
+  el("accessCopy").onclick=async()=>{try{await navigator.clipboard.writeText(el("accessCode").value);message("Código copiado. Guarde fora do navegador.");}catch(_){el("accessCode").select();message("Selecione e copie o código acima.");}};
+  const restore=async(path,data)=>{
+    if(!confirm("Recuperar este cadastro neste navegador? Se você já acumulou pontos no cadastro atual, eles serão somados ao recuperado. O código anterior será invalidado.")){message("");return;}
+    const result=await reservationApi(path,{method:"POST",body:JSON.stringify(data)});
+    applyReservations(result);clearSecrets();await loadRanking();message("Acesso recuperado! Gere e guarde um novo código de recuperação.");
+  };
+  el("accessRestore").onclick=()=>run(()=>restore("/recovery/restore",{code:el("accessRestoreCode").value.trim()}));
+  el("accessList").onclick=()=>run(async()=>{
+    const data=await reservationApi("/recovery/admin-list",{method:"POST",body:JSON.stringify({adminKey:el("accessAdminKey").value})});
+    el("accessProfiles").replaceChildren(new Option("Selecione o cadastro antigo",""));
+    data.profiles.sort((a,b)=>a.name.localeCompare(b.name,"pt-BR")).forEach(p=>el("accessProfiles").append(new Option(`${p.name} · ${p.bikes||0} patinetes na semana · ${p.id.slice(0,8)} · ${new Date(p.createdAt).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"})}`,p.id)));
+    message("Selecione o cadastro antigo. Se houver nomes iguais, confira a data de criação.");
+  });
+  el("accessAdminRestore").onclick=()=>run(async()=>{
+    const profileId=el("accessProfiles").value;if(!profileId)throw new Error("Selecione o cadastro antigo.");
+    await restore("/recovery/admin-restore",{adminKey:el("accessAdminKey").value,profileId});
+  });
+}
+setTimeout(setupAccessRecovery,0);
 function rankingIsOpen(){return document.getElementById("infoPanel")?.classList.contains("open");}
 function renderRanking(){
   const body=document.getElementById("rankingRows"),note=document.getElementById("rankingMessage");if(!body||!note)return;
   rememberReservationName(reservationName);
-  const metricLabel=rankingMetric==="bikes"?"Patinetes":"Estacionamentos";
-  document.getElementById("rankingMetricLabel").textContent=metricLabel;
-  document.getElementById("rankingRefresh").disabled=rankingLoading;
   body.replaceChildren();
-  const rows=(rankingData?.rows||[]).filter(row=>row[rankingMetric]>0).sort((a,b)=>b[rankingMetric]-a[rankingMetric]||b[rankingMetric==="bikes"?"parkings":"bikes"]-a[rankingMetric==="bikes"?"parkings":"bikes"]||a.name.localeCompare(b.name,"pt-BR")||a.id.localeCompare(b.id));
+  const rows=(rankingData?.rows||[]).slice().sort((a,b)=>b[rankingMetric]-a[rankingMetric]||b[rankingMetric==="bikes"?"parkings":"bikes"]-a[rankingMetric==="bikes"?"parkings":"bikes"]||a.name.localeCompare(b.name,"pt-BR")||a.id.localeCompare(b.id));
   let previous=null,rank=0;
   rows.forEach((row,index)=>{
     if(previous!==row[rankingMetric])rank=index+1;previous=row[rankingMetric];
     const tr=document.createElement("tr");if(row.mine)tr.className="ranking-mine";
-    const position=document.createElement("td"),person=document.createElement("td"),amount=document.createElement("td");
-    position.textContent=String(rank)+"º";person.textContent=row.name;amount.textContent=row[rankingMetric];
-    if(row.mine){const badge=document.createElement("span");badge.className="ranking-you";badge.textContent="você";person.appendChild(badge);}
-    tr.appendChild(position);tr.appendChild(person);tr.appendChild(amount);body.appendChild(tr);
+    for(const value of [String(rank)+"º",row.name+(row.mine?" (você)":""),row.bikes,row.parkings]){const td=document.createElement("td");td.textContent=value;tr.appendChild(td);}body.appendChild(tr);
   });
-  if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=3;td.className="ranking-empty";td.textContent=rankingLoading?"Carregando…":rankingMetric==="bikes"?"Nenhum patinete registrado neste período.":"Nenhum estacionamento concluído neste período.";tr.appendChild(td);body.appendChild(tr);}
+  if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=4;td.textContent=rankingLoading?"Carregando ranking…":"Ainda não há abastecimentos registrados neste período.";tr.appendChild(td);body.appendChild(tr);}
   if(rankingData){
-    note.textContent=`Atualizado às ${new Date(rankingData.serverTime).toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo",hour:"2-digit",minute:"2-digit"})}`;
-  }else{note.textContent=rankingLoading?"Atualizando…":"";}
+    const fmt=d=>d.split("-").reverse().join("/");
+    note.textContent=`${fmt(rankingData.start)} a ${fmt(rankingData.end)} · Horário de Brasília · Atualizado às ${new Date(rankingData.serverTime).toLocaleTimeString("pt-BR",{timeZone:"America/Sao_Paulo"})}`+(rankingData.upstreamError?" · Contagem JET indisponível; aguardando nova leitura.":"");
+  }
   document.querySelectorAll("[data-ranking-period]").forEach(b=>{b.classList.toggle("active",b.dataset.rankingPeriod===rankingPeriod);b.setAttribute("aria-pressed",String(b.dataset.rankingPeriod===rankingPeriod));});
   document.querySelectorAll("[data-ranking-metric]").forEach(b=>{b.classList.toggle("active",b.dataset.rankingMetric===rankingMetric);b.setAttribute("aria-pressed",String(b.dataset.rankingMetric===rankingMetric));});
 }
 async function loadRanking(){
   const revision=++rankingRevision,period=rankingPeriod;rankingLoading=true;renderRanking();
-  document.getElementById("rankingMessage").textContent="Atualizando…";
+  document.getElementById("rankingMessage").textContent="Atualizando ranking…";
   try{
     const data=await reservationApi("/ranking?period="+period);if(revision!==rankingRevision)return;
     if(!Array.isArray(data.rows))throw new Error("Atualize também o worker.mjs para ativar o ranking.");
     rankingData=data;rankingLastRefresh=Date.now();
-  }catch(e){if(revision!==rankingRevision)return;const message=document.getElementById("rankingMessage");message.textContent="Não foi possível atualizar. Tente ↻.";message.title=e.message;return;}
-  finally{if(revision===rankingRevision){rankingLoading=false;document.getElementById("rankingRefresh").disabled=false;}}
+  }catch(e){if(revision!==rankingRevision)return;document.getElementById("rankingMessage").textContent="Não foi possível atualizar o ranking. "+e.message;return;}
+  finally{if(revision===rankingRevision)rankingLoading=false;}
   renderRanking();
 }
 function setupRanking(){

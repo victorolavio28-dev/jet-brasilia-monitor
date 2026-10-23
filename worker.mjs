@@ -48,6 +48,34 @@ export function periodStart(period,time=Date.now()){
   if(period==="week"){const d=new Date(day+"T12:00:00Z");d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
   return day;
 }
+async function digest(value){
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,"0")).join("");
+}
+function randomRecoveryCode(){return "JET-"+Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,"0")).join("");}
+async function requireRecoveryAdmin(env,key){
+  const expected=env.RECOVERY_ADMIN_KEY;
+  if(typeof expected!=="string"||expected.length<32)throw fail("Configure RECOVERY_ADMIN_KEY como segredo de pelo menos 32 caracteres na Cloudflare.",503);
+  const a=await digest(String(key||"")),b=await digest(expected);let diff=0;
+  for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);
+  if(diff)throw fail("Chave de administrador inválida.",403);
+}
+// Mantém o ID do perfil recuperado e soma o histórico do cadastro atual, se houver.
+async function moveProfile(tx,sourceKey,ownerHash){
+  const targetKey="p:"+ownerHash,p=await tx.get(sourceKey);
+  if(!p)throw fail("Cadastro não encontrado.",404);
+  const current=await tx.get(targetKey);
+  if(sourceKey!==targetKey&&current&&current.id!==p.id){
+    for(const [key,entry] of await tx.list({prefix:"d:"}))if(entry.profileId===current.id){
+      const mergedKey=`d:${entry.day}:${p.id}`,old=await tx.get(mergedKey);
+      await tx.put(mergedKey,{...entry,profileId:p.id,name:p.name,bikes:(old?.bikes||0)+entry.bikes,parkings:(old?.parkings||0)+entry.parkings});
+      await tx.delete(key);
+    }
+  }
+  for(const [key,r] of await tx.list({prefix:"r:"}))if(r.ownerHash===sourceKey.slice(2)||r.ownerHash===ownerHash){r.ownerHash=ownerHash;r.name=p.name;await tx.put(key,r);}
+  // Código de uso único. O usuário deve guardar um novo após recuperar.
+  delete p.recoveryHash;
+  await tx.put(targetKey,p);if(sourceKey!==targetKey)await tx.delete(sourceKey);
+}
 async function profileFor(tx,ownerHash,name){
   const key="p:"+ownerHash;let p=await tx.get(key);
   if(!p){p={id:crypto.randomUUID(),name,createdAt:Date.now()};await tx.put(key,p);}
@@ -119,7 +147,8 @@ export class Reservas {
   }
   async view(ownerHash){
     const reservations=[...(await this.ctx.storage.list({prefix:"r:"})).values()].map(({ownerHash:owner,...r})=>({...r,mine:owner===ownerHash}));
-    return {serverTime:Date.now(),version:3,profile:ownerHash?(await this.ctx.storage.get("p:"+ownerHash))||null:null,reservations,lastCheck:this.lastCheck,upstreamError:this.upstreamError};
+    const p=ownerHash?await this.ctx.storage.get("p:"+ownerHash):null;
+    return {serverTime:Date.now(),version:3,profile:p?{id:p.id,name:p.name,createdAt:p.createdAt,hasRecoveryCode:!!p.recoveryHash}:null,reservations,lastCheck:this.lastCheck,upstreamError:this.upstreamError};
   }
   async fetch(request){
     try{
@@ -136,6 +165,36 @@ export class Reservas {
         await this.reconcile(null);
         await this.arm();
         return reply(await this.ranking(url.searchParams.get("period")||"day",ownerHash));
+      }
+      if(method==="POST"&&url.pathname.startsWith("/api/reservas/recovery/")){
+        const raw=await request.text();if(raw.length>4096)throw fail("Pedido muito grande.",413);
+        let data;try{data=JSON.parse(raw);}catch(_){throw fail("Pedido inválido.",400);}
+        const action=url.pathname.slice("/api/reservas/recovery/".length);
+        if(action==="code"){
+          const code=randomRecoveryCode(),hash=await digest(code);
+          await this.ctx.storage.transaction(async tx=>{
+            const p=await tx.get("p:"+ownerHash);if(!p)throw fail("Informe seu nome antes de guardar o acesso.",400);
+            p.recoveryHash=hash;await tx.put("p:"+ownerHash,p);
+          });return reply({code});
+        }
+        if(action==="admin-list"||action==="admin-restore"){
+          await requireRecoveryAdmin(this.env,data.adminKey);
+          if(action==="admin-list"){
+            const weekly=await this.ranking("week",ownerHash),totals=new Map(weekly.rows.map(r=>[r.id,r]));
+            const profiles=[...(await this.ctx.storage.list({prefix:"p:"})).values()].map(p=>({id:p.id,name:p.name,createdAt:p.createdAt,bikes:totals.get(p.id)?.bikes||0,parkings:totals.get(p.id)?.parkings||0}));
+            return reply({profiles});
+          }
+          if(typeof data.profileId!=="string"||!data.profileId)throw fail("Selecione o cadastro antigo.",400);
+        }else if(action!=="restore")throw fail("Rota não encontrada.",404);
+        const code=String(data.code||"").trim();
+        if(action==="restore"&&!/^JET-[a-f0-9]{48}$/.test(code))throw fail("Código de recuperação inválido.",400);
+        const hash=action==="restore"?await digest(code):null;
+        await this.ctx.storage.transaction(async tx=>{
+          const profiles=await tx.list({prefix:"p:"});
+          const matches=[...profiles].filter(([key,p])=>action==="restore"?p.recoveryHash===hash:p.id===data.profileId);
+          if(matches.length!==1)throw fail(action==="restore"?"Código inválido ou já utilizado.":"Cadastro não encontrado ou ambíguo.",404);
+          await moveProfile(tx,matches[0][0],ownerHash);
+        });return reply(await this.view(ownerHash));
       }
       if(method==="POST"&&url.pathname==="/api/reservas/observations"){
         const raw=await request.text();if(raw.length>40000)throw fail("Pedido muito grande.",413);

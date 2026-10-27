@@ -36,7 +36,7 @@ for(const kind of ["parkings","bikes"]){
   // Resultado refletido evita rejeição sem consumidor durante a abertura do mapa.
   jetBootstrapPages.set(kind,jetFetchPage(kind,1).then(data=>({data}),error=>({error})));
 }
-</script><meta name="theme-color" content="#121624"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="JET Monitor"><link rel="manifest" href="manifest.json"><link href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" rel="stylesheet"><style>
+</script><meta name="theme-color" content="#121624"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="JET Monitor"><link rel="manifest" href="manifest.json"><link rel="icon" type="image/png" sizes="192x192" href="icon-192-jet-blue-v1.png"><link rel="apple-touch-icon" href="icon-192-jet-blue-v1.png"><link href="https://unpkg.com/maplibre-gl@5.13.0/dist/maplibre-gl.css" rel="stylesheet"><style>
 body{margin:0;background:#090b12;color:#f4f6fb;font:14px system-ui}header{padding:16px;background:#121624;position:sticky;top:0;z-index:9}h1{margin:0;font-size:20px}.sub{color:#9aa3ba;font-size:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}button,input,select{background:#181d2d;color:#fff;border:1px solid #30374e;border-radius:9px;padding:8px}.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px}.card{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:12px}.label{color:#9aa3ba;font-size:10px}.value{font-size:23px;font-weight:800}main{padding:0 10px}#map{height:60vh;border-radius:13px;overflow:hidden}.tables{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.box{background:#121624;border:1px solid #252b3e;border-radius:12px;padding:10px;overflow:auto;max-height:420px}table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:7px;border-bottom:1px solid #252b3e;text-align:left}th{color:#9aa3ba}.ok{color:#18b77a}.warn{color:#c98b00}.orange{color:#ff9500}.bad{color:#ff3b30}@media(max-width:800px){.cards{grid-template-columns:repeat(2,1fr)}.tables{grid-template-columns:1fr}#map{height:58vh}}
 #map{position:relative;background:#eef1f3;touch-action:none}
 .maplibregl-canvas{outline:none}
@@ -1951,3 +1951,4 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopQrCamer
 window.addEventListener('pagehide',stopQrCamera);
 
 </script></body></html>
+

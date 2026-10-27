@@ -2,7 +2,7 @@
    Estratégia: rede primeiro para evitar versões antigas após atualizações.
 */
 
-const CACHE_NAME = "jet-brasilia-monitor-v4";
+const CACHE_NAME = "jet-brasilia-monitor-v5";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -57,3 +57,4 @@ self.addEventListener("fetch", event => {
 
   event.respondWith(networkFirst(request));
 });
+
